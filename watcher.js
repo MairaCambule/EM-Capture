@@ -8,8 +8,8 @@ const WATCH_FOLDER = "Z:/EM Capture/incoming";
 const PROCESSED_FOLDER = "Z:/EM Capture/processed";
 const ERROR_FOLDER = "Z:/EM Capture/error";
 
-const API_URL = "https://em-capture-backend.onrender.com/api/photos/ingest";
-const ACTIVE_SESSION_URL = "https://em-capture-backend.onrender.com/api/camera/active-session";
+const API_URL = "http://localhost:3001/api/photos/ingest";
+const ACTIVE_SESSION_URL = "http://localhost:3001/api/camera/active-session";
 
 // coloca aqui o camera_id real que usas no sistema
 const CAMERA_ID = "00000000-0000-0000-0000-000000000001";
