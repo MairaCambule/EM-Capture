@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
+import axios from "axios";
 
 
+//const API_URL = "https://em-capture-backend.onrender.com/api/photos/ingest";
+const ACTIVE_SESSION_URL = "https://em-capture-backend.onrender.com/api/camera/active-session";
 
-const API_URL = import.meta.env.VITE_API_URL;
+//const API_URL = import.meta.env.VITE_API_URL;
 const CAMERA_ID = import.meta.env.VITE_DEFAULT_CAMERA_ID;
+
 const PHOTO_BUCKET = "clinical-photos";
 
 export default function Capture({ session }) {
@@ -36,6 +40,10 @@ const [currentPhase, setCurrentPhase] = useState("during");
 const [showStopConfirmModal, setShowStopConfirmModal] = useState(false);
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
+
+const BASE_URL = "https://em-capture-backend.onrender.com";
+
+const API_URL = `${BASE_URL}/api/photos/ingest`;
 
 
   const [cameraState, setCameraState] = useState(null);
