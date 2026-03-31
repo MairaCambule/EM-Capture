@@ -135,6 +135,10 @@ const API_URL = `${BASE_URL}/api/photos/ingest`;
     cameraState?.status === "in_use" &&
     cameraState?.current_user_id === currentUserId;
 
+    console.log("session:", session);
+console.log("access token exists:", !!session?.access_token);
+console.log("API_BASE_URL:", API_BASE_URL);
+
   const canManageQueue = !isCurrentUserUsingCamera;
 
   const canUploadPhotos =
