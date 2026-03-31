@@ -41,9 +41,9 @@ const [showStopConfirmModal, setShowStopConfirmModal] = useState(false);
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 
-const BASE_URL = "https://em-capture-backend.onrender.com";
+//const BASE_URL = "https://em-capture-backend.onrender.com";
 
-const API_URL = `${BASE_URL}/api/photos/ingest`;
+//const API_URL = `${BASE_URL}/api/photos/ingest`;
 
 
   const [cameraState, setCameraState] = useState(null);
@@ -245,39 +245,73 @@ const filteredRecords = activeRecordsSource.filter((record) => {
   }
 
   async function apiPost(path, body) {
-    const {
-      data: { session: activeSession },
-      error: sessionError,
-    } = await supabase.auth.getSession();
+  const {
+    data: { session: activeSession },
+    error: sessionError,
+  } = await supabase.auth.getSession();
 
-    if (sessionError || !activeSession?.access_token) {
-      throw new Error("Sessão inválida. Faz login novamente.");
-    }
-
-    const response = await fetch(`${API_URL}${path}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${activeSession.access_token}`,
-      },
-      body: JSON.stringify(body),
-    });
-
-    const text = await response.text();
-
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      throw new Error("O backend devolveu uma resposta inválida.");
-    }
-
-    if (!response.ok) {
-      throw new Error(data.error || "Erro na operação.");
-    }
-
-    return data;
+  if (sessionError || !activeSession?.access_token) {
+    throw new Error("Sessão inválida. Faz login novamente.");
   }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${activeSession.access_token}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  const text = await response.text();
+
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error("O backend devolveu uma resposta inválida.");
+  }
+
+  if (!response.ok) {
+    throw new Error(data.error || "Erro na operação.");
+  }
+
+  return data;
+}
+
+async function apiGet(path) {
+  const {
+    data: { session: activeSession },
+    error: sessionError,
+  } = await supabase.auth.getSession();
+
+  if (sessionError || !activeSession?.access_token) {
+    throw new Error("Sessão inválida. Faz login novamente.");
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${activeSession.access_token}`,
+    },
+  });
+
+  const text = await response.text();
+
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error("O backend devolveu uma resposta inválida.");
+  }
+
+  if (!response.ok) {
+    throw new Error(data.error || "Erro ao obter dados.");
+  }
+
+  return data;
+}
+
 
   async function expireTurn() {
     try {
@@ -571,9 +605,9 @@ const filteredRecords = activeRecordsSource.filter((record) => {
 
 async function loadTeachers() {
   try {
-    const res = await axios.get("https://em-capture-backend.onrender.com/api/teachers", {
+    const res = await axios.get(`${API_BASE_URL}/api/teachers`, {
       headers: {
-        Authorization:`Bearer ${activeSession.access_token}`,
+        Authorization:`Bearer ${session?.access_token}`,
       },
     });
 
