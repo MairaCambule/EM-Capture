@@ -1,0 +1,2184 @@
+import { useEffect, useMemo, useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "../supabaseClient";
+
+
+
+const API_URL = import.meta.env.VITE_API_URL;
+const CAMERA_ID = import.meta.env.VITE_DEFAULT_CAMERA_ID;
+const PHOTO_BUCKET = "clinical-photos";
+
+export default function Capture({ session }) {
+  const navigate = useNavigate();
+
+  const [showTurnModal, setShowTurnModal] = useState(false);
+  const [msg, setMsg] = useState({ text: "", type: "" });
+  useEffect(() => {
+  if (!msg.text) return;
+
+  const timeout =
+    msg.type === "warning" ? 30000 : 4000;
+
+  const timer = setTimeout(() => {
+    setMsg({ text: "", type: "" });
+  }, timeout);
+
+  return () => clearTimeout(timer);
+}, [msg]);
+
+const [teachers, setTeachers] = useState([]);
+const [selectedTeacherId, setSelectedTeacherId] = useState("");
+const [sessionTeachers, setSessionTeachers] = useState([]);
+const [loadingTeachers, setLoadingTeachers] = useState(false);
+
+const [currentPhase, setCurrentPhase] = useState("during");
+
+const [showStopConfirmModal, setShowStopConfirmModal] = useState(false);
+
+const API_BASE_URL = import.meta.env.VITE_API_URL;
+
+
+  const [cameraState, setCameraState] = useState(null);
+  const [queueEntries, setQueueEntries] = useState([]);
+  const [profilesMap, setProfilesMap] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [box, setBox] = useState("");
+  const [patientCode, setPatientCode] = useState("");
+  const [currentSession, setCurrentSession] = useState(null);
+  const [turnExpired, setTurnExpired] = useState(false);
+  const [expiringTurn, setExpiringTurn] = useState(false);
+
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [photoPhase, setPhotoPhase] = useState("after");
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+
+  const [myRecords, setMyRecords] = useState([]);
+  const [recordsSearch, setRecordsSearch] = useState("");
+  const [selectedRecord, setSelectedRecord] = useState(null);
+  const [selectedRecordPhotos, setSelectedRecordPhotos] = useState([]);
+  const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
+
+  const [filterDate, setFilterDate] = useState("");
+  const [filterName, setFilterName] = useState("");
+  const [filterPatientCode, setFilterPatientCode] = useState("");
+  const [filterBox, setFilterBox] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+
+  const [photoPreviewMap, setPhotoPreviewMap] = useState({});
+
+  const [profile, setProfile] = useState(null);
+  const [moduleRole, setModuleRole] = useState("user");
+  const [recordsView, setRecordsView] = useState("mine");
+  const [allRecords, setAllRecords] = useState([]);
+
+  const [pendingResumeRecord, setPendingResumeRecord] = useState(null);
+
+  useEffect(() => {
+  async function setupRealtimeAuth() {
+    const {
+      data: { session: activeSession },
+    } = await supabase.auth.getSession();
+
+    if (activeSession?.access_token) {
+      await supabase.realtime.setAuth(activeSession.access_token);
+    }
+  }
+
+  setupRealtimeAuth();
+}, []);
+
+  const currentUserId = session?.user?.id;
+
+  const myNotifiedEntry = queueEntries.find(
+    (entry) => entry.user_id === currentUserId && entry.status === "notified"
+  );
+
+  const isMyTurn = useMemo(() => {
+    if (
+      cameraState?.status !== "reserved" ||
+      cameraState?.current_user_id !== currentUserId
+    ) {
+      return false;
+    }
+
+    if (!myNotifiedEntry?.expires_at) {
+      return false;
+    }
+
+    return new Date(myNotifiedEntry.expires_at) > new Date();
+  }, [cameraState, currentUserId, myNotifiedEntry]);
+
+  const isGlobalAdmin = profile?.role === "global_admin";
+  const isModuleAdmin = moduleRole === "module_admin";
+  const canViewAllRecords = isGlobalAdmin || isModuleAdmin;
+
+  const canStartSession =
+    cameraState?.status === "reserved" &&
+    cameraState?.current_user_id === currentUserId &&
+    myNotifiedEntry &&
+    new Date(myNotifiedEntry.expires_at) > new Date();
+
+  const canPauseOrStop =
+    cameraState?.status === "in_use" &&
+    cameraState?.current_user_id === currentUserId &&
+    !!cameraState?.current_session_id;
+
+  const isCurrentUserUsingCamera =
+    cameraState?.status === "in_use" &&
+    cameraState?.current_user_id === currentUserId;
+
+  const canManageQueue = !isCurrentUserUsingCamera;
+
+  const canUploadPhotos =
+    cameraState?.status === "in_use" &&
+    cameraState?.current_user_id === currentUserId &&
+    !!cameraState?.current_session_id;
+
+ const activeRecordsSource =
+  recordsView === "all" && canViewAllRecords ? allRecords : myRecords;
+
+const filteredRecords = activeRecordsSource.filter((record) => {
+  const matchesDate = filterDate
+    ? (record.started_at || "").slice(0, 10) === filterDate
+    : true;
+
+  const matchesName = filterName
+    ? (record.user_name || "").toLowerCase().includes(filterName.toLowerCase())
+    : true;
+
+  const matchesPatientCode = filterPatientCode
+    ? (record.patient_code || "")
+        .toLowerCase()
+        .includes(filterPatientCode.toLowerCase())
+    : true;
+
+  const matchesBox = filterBox
+    ? (record.box || "").toLowerCase().includes(filterBox.toLowerCase())
+    : true;
+
+  const matchesStatus = filterStatus
+    ? formatSessionStatus(record.status)
+        .toLowerCase()
+        .includes(filterStatus.toLowerCase())
+    : true;
+
+  return (
+    matchesDate &&
+    matchesName &&
+    matchesPatientCode &&
+    matchesBox &&
+    matchesStatus
+  );
+});
+
+  function getStatusMeta(status) {
+    switch (status) {
+      case "available":
+        return { label: "Disponível", bg: "#e8f2fd", color: "#1e4a8d" };
+      case "reserved":
+        return { label: "Reservada", bg: "#fdf2dc", color: "#c7952d" };
+      case "in_use":
+        return { label: "Em uso", bg: "#e8f4ec", color: "#2f7d4c" };
+      case "paused":
+        return { label: "Pausada", bg: "#eef1f5", color: "#5f6b7a" };
+      default:
+        return { label: status || "—", bg: "#eef1f5", color: "#5f6b7a" };
+    }
+  }
+
+  function formatSessionStatus(status) {
+    switch (status) {
+      case "open":
+        return "Aberta";
+      case "paused":
+        return "Pausada";
+      case "closed":
+        return "Fechada";
+      case "auto_closed":
+        return "Fechada auto.";
+      default:
+        return status || "—";
+    }
+  }
+
+  function formatPhaseLabel(phase) {
+  switch (phase) {
+    case "before":
+      return "Inicial";
+    case "during":
+      return "Durante";
+    case "after":
+      return "Final";
+    default:
+      return phase || "-";
+  }
+}
+
+  function groupPhotosByPhase(photos) {
+    return {
+      before: photos.filter((p) => p.phase === "before"),
+      during: photos.filter((p) => p.phase === "during"),
+      after: photos.filter((p) => p.phase === "after"),
+    };
+  }
+
+  const groupedSelectedRecordPhotos = groupPhotosByPhase(selectedRecordPhotos);
+  const statusMeta = getStatusMeta(cameraState?.status);
+
+
+  axios.get(`${API_BASE_URL}/api/teachers`)
+  
+  async function logout() {
+    await supabase.auth.signOut();
+  }
+
+  async function apiPost(path, body) {
+    const {
+      data: { session: activeSession },
+      error: sessionError,
+    } = await supabase.auth.getSession();
+
+    if (sessionError || !activeSession?.access_token) {
+      throw new Error("Sessão inválida. Faz login novamente.");
+    }
+
+    const response = await fetch(`${API_URL}${path}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${activeSession.access_token}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    const text = await response.text();
+
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error("O backend devolveu uma resposta inválida.");
+    }
+
+    if (!response.ok) {
+      throw new Error(data.error || "Erro na operação.");
+    }
+
+    return data;
+  }
+
+  async function expireTurn() {
+    try {
+      const data = await apiPost("/api/queue/expire-turn", {
+        cameraId: CAMERA_ID,
+      });
+      return data;
+    } catch (error) {
+      console.error("EXPIRE TURN ERROR:", error);
+      return null;
+    }
+  }
+
+  async function syncQueueState() {
+  try {
+    const data = await apiPost("/api/queue/sync", {
+      cameraId: CAMERA_ID,
+    });
+    return data;
+  } catch (error) {
+    console.error("SYNC QUEUE ERROR:", error);
+    return null;
+  }
+}
+
+  const loadData = useCallback(async () => {
+  try {
+    setLoading(true);
+
+    await syncQueueState();
+
+    const { data: stateData, error: stateError } = await supabase
+      .from("camera_state")
+      .select("*")
+      .eq("camera_id", CAMERA_ID)
+      .single();
+
+    if (stateError) {
+      console.error("Erro ao carregar camera_state:", stateError);
+      return;
+    }
+
+    setCameraState(stateData);
+
+    setCurrentPhase(stateData?.current_phase || "during");
+
+    const { data: queueData, error: queueError } = await supabase
+      .from("queue_entries")
+      .select("*")
+      .eq("camera_id", CAMERA_ID)
+      .in("status", ["waiting", "notified"])
+      .order("joined_at", { ascending: true });
+
+    if (queueError) {
+      console.error("Erro ao carregar fila:", queueError);
+    }
+
+    const safeQueue = queueData || [];
+    setQueueEntries(safeQueue);
+
+    const { data: profileData, error: profileError } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", currentUserId)
+      .single();
+
+    if (profileError) {
+      console.error("Erro ao carregar profile:", profileError);
+    } else {
+      setProfile(profileData);
+    }
+
+    const { data: moduleData, error: moduleError } = await supabase
+      .from("user_module_access")
+      .select(`
+        role,
+        platform_modules (
+          code
+        )
+      `)
+      .eq("user_id", currentUserId);
+
+    let currentModuleRole = "user";
+
+    if (moduleError) {
+      console.error("Erro ao carregar role do módulo:", moduleError);
+    } else {
+      currentModuleRole =
+        (moduleData || []).find(
+          (item) => item.platform_modules?.code === "em_capture"
+        )?.role || "user";
+
+      setModuleRole(currentModuleRole);
+    }
+
+    if (stateData?.current_session_id) {
+      const { data: sessionData, error: sessionError } = await supabase
+        .from("clinical_sessions")
+        .select("*")
+        .eq("id", stateData.current_session_id)
+        .maybeSingle();
+
+      if (!sessionError) {
+        setCurrentSession(sessionData || null);
+      } else {
+        setCurrentSession(null);
+      }
+    } else {
+      setCurrentSession(null);
+    }
+
+    // Buscar todos os user_id possíveis para montar o mapa de nomes
+    const { data: allSessionsForNames, error: allSessionsForNamesError } =
+      await supabase.from("clinical_sessions").select("user_id");
+
+    if (allSessionsForNamesError) {
+      console.error(
+        "Erro ao carregar user_ids de clinical_sessions:",
+        allSessionsForNamesError
+      );
+    }
+
+    const ids = [
+      ...new Set(
+        [
+          ...safeQueue.map((q) => q.user_id),
+          ...(allSessionsForNames || []).map((s) => s.user_id),
+          stateData?.current_user_id,
+          currentUserId,
+        ].filter(Boolean)
+      ),
+    ];
+
+    let localProfilesMap = {};
+
+    if (ids.length > 0) {
+      const { data: profilesData, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id, full_name")
+        .in("id", ids);
+
+      if (profilesError) {
+        console.error("Erro ao carregar profiles:", profilesError);
+      } else {
+        (profilesData || []).forEach((p) => {
+          localProfilesMap[p.id] = p.full_name || p.id;
+        });
+
+        setProfilesMap(localProfilesMap);
+      }
+    } else {
+      setProfilesMap({});
+    }
+
+    // Meus registos
+    const { data: sessionsData, error: sessionsError } = await supabase
+      .from("clinical_sessions")
+      .select("*")
+      .eq("user_id", currentUserId)
+      .order("started_at", { ascending: false });
+
+    if (sessionsError) {
+      console.error("Erro ao carregar meus registos:", sessionsError);
+      setMyRecords([]);
+    } else {
+      const sessions = sessionsData || [];
+
+      if (sessions.length === 0) {
+        setMyRecords([]);
+      } else {
+        const sessionIds = sessions.map((s) => s.id);
+
+        const { data: photosData, error: photosError } = await supabase
+          .from("session_photos")
+          .select("session_id, id")
+          .in("session_id", sessionIds);
+
+        if (photosError) {
+          console.error("Erro ao carregar contagem de fotos:", photosError);
+        }
+
+        const photoCountMap = {};
+        (photosData || []).forEach((photo) => {
+          photoCountMap[photo.session_id] =
+            (photoCountMap[photo.session_id] || 0) + 1;
+        });
+
+        const records = sessions.map((sessionItem) => ({
+          ...sessionItem,
+          user_name: localProfilesMap[sessionItem.user_id] || sessionItem.user_id,
+          photos_count: photoCountMap[sessionItem.id] || 0,
+        }));
+
+        setMyRecords(records);
+      }
+    }
+
+    // Todos os registos (apenas para admins)
+    if (
+      profileData?.role === "global_admin" ||
+      currentModuleRole === "module_admin"
+    ) {
+      const { data: allSessionsData, error: allSessionsError } = await supabase
+        .from("clinical_sessions")
+        .select("*")
+        .order("started_at", { ascending: false });
+
+      if (allSessionsError) {
+        console.error("Erro ao carregar todos os registos:", allSessionsError);
+        setAllRecords([]);
+      } else {
+        const allSessions = allSessionsData || [];
+
+        if (allSessions.length === 0) {
+          setAllRecords([]);
+        } else {
+          const allSessionIds = allSessions.map((s) => s.id);
+
+          const { data: allPhotosData, error: allPhotosError } = await supabase
+            .from("session_photos")
+            .select("session_id, id")
+            .in("session_id", allSessionIds);
+
+          if (allPhotosError) {
+            console.error(
+              "Erro ao carregar contagem global de fotos:",
+              allPhotosError
+            );
+          }
+
+          const allPhotoCountMap = {};
+          (allPhotosData || []).forEach((photo) => {
+            allPhotoCountMap[photo.session_id] =
+              (allPhotoCountMap[photo.session_id] || 0) + 1;
+          });
+
+          const allRecordsMapped = allSessions.map((sessionItem) => ({
+            ...sessionItem,
+            user_name:
+              localProfilesMap[sessionItem.user_id] || sessionItem.user_id,
+            photos_count: allPhotoCountMap[sessionItem.id] || 0,
+          }));
+
+          setAllRecords(allRecordsMapped);
+        }
+      }
+    } else {
+      setAllRecords([]);
+    }
+  } catch (error) {
+    console.error("Erro ao carregar dados:", error);
+  } finally {
+    setLoading(false);
+  }
+}, [currentUserId]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  async function updatePhase(phase) {
+  try {
+    const data = await apiPost("/api/camera/phase", {
+      cameraId: CAMERA_ID,
+      phase,
+    });
+
+    if (data.updated) {
+      setCurrentPhase(phase);
+      setMsg({
+        text: `Fase atual definida como ${
+          phase === "before"
+            ? "Antes"
+            : phase === "during"
+            ? "Durante"
+            : "Depois"
+        }.`,
+        type: "success",
+      });
+
+      await loadData();
+    }
+  } catch (error) {
+    console.error("UPDATE PHASE ERROR:", error);
+    setMsg({
+      text: error.message,
+      type: "warning",
+    });
+  }
+}
+
+async function loadTeachers() {
+  try {
+    const res = await axios.get("https://em-capture-backend.onrender.com/api/teachers", {
+      headers: {
+        Authorization:`Bearer ${activeSession.access_token}`,
+      },
+    });
+
+    console.log("Teachers:", res.data);
+
+    setTeachers(res.data || []);
+  } catch (error) {
+    console.error("Erro ao carregar professores:", error);
+  }
+}
+
+
+async function loadSessionTeachers(sessionId) {
+  try {
+    const res = await api.get(`/api/session/${sessionId}/teachers`);
+
+    console.log("Session teachers:", res.data);
+
+    setSessionTeachers(res.data.teachers || []);
+  } catch (err) {
+    console.error("Erro ao carregar professores da sessão:", err);
+  }
+}
+
+
+
+async function assignTeacher(sessionId) {
+  if (!selectedTeacherId) return;
+
+  try {
+    await api.post("/api/session/assign-teacher", {
+      sessionId,
+      teacherUserId: selectedTeacherId,
+    });
+
+    // reload
+    await loadSessionTeachers(sessionId);
+
+    setSelectedTeacherId("");
+  } catch (err) {
+    console.error("Erro ao associar professor:", err);
+  }
+}
+
+useEffect(() => {
+  if (selectedRecord?.id) {
+    loadTeachers();
+    loadSessionTeachers(selectedRecord.id);
+  }
+}, [selectedRecord]);
+
+
+ useEffect(() => {
+  const channel = supabase
+    .channel(`em-capture-${CAMERA_ID}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "camera_state",
+        filter: `camera_id=eq.${CAMERA_ID}`,
+      },
+      () => {
+        loadData();
+      }
+    )
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "queue_entries",
+        filter: `camera_id=eq.${CAMERA_ID}`,
+      },
+      () => {
+        loadData();
+      }
+    )
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "clinical_sessions",
+      },
+      () => {
+        loadData();
+      }
+    )
+    .subscribe((status) => {
+      console.log("Realtime status:", status);
+    });
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, [loadData]);
+
+useEffect(() => {
+  const shouldPoll =
+    cameraState?.status === "reserved" ||
+    cameraState?.status === "available" ||
+    queueEntries.some((entry) =>
+      entry.status === "waiting" || entry.status === "notified"
+    );
+
+  if (!shouldPoll) {
+    return;
+  }
+
+  const interval = setInterval(async () => {
+    await syncQueueState();
+    await loadData();
+  }, 10000);
+
+  return () => clearInterval(interval);
+}, [cameraState, queueEntries, loadData]);
+
+  useEffect(() => {
+    async function handleExpiredTurn() {
+      if (
+        expiringTurn ||
+        cameraState?.status !== "reserved" ||
+        !myNotifiedEntry?.expires_at
+      ) {
+        if (
+          cameraState?.status !== "reserved" ||
+          !myNotifiedEntry?.expires_at
+        ) {
+          setTurnExpired(false);
+        }
+        return;
+      }
+
+      const isExpired = new Date(myNotifiedEntry.expires_at) <= new Date();
+
+      if (!isExpired) {
+        setTurnExpired(false);
+        return;
+      }
+
+      setTurnExpired(true);
+      setExpiringTurn(true);
+
+      const result = await expireTurn();
+
+      if (result) {
+        await loadData();
+      }
+
+      setExpiringTurn(false);
+    }
+
+    handleExpiredTurn();
+  }, [cameraState, myNotifiedEntry, loadData, expiringTurn]);
+
+  useEffect(() => {
+  if (isMyTurn) {
+    setShowTurnModal(true);
+  }
+}, [isMyTurn]);
+
+useEffect(() => {
+  if (!isMyTurn) {
+    setShowTurnModal(false);
+  }
+}, [isMyTurn]);
+
+  async function joinQueue() {
+    setMsg("");
+    try {
+      const data = await apiPost("/api/queue/join", { cameraId: CAMERA_ID });
+      setMsg({
+  text: `Entraste na fila com sucesso. ID: ${data.queueEntryId}`,
+  type: "success"
+});
+      await loadData();
+    } catch (error) {
+      console.error("QUEUE JOIN ERROR:", error);
+      setMsg(error.message);
+    }
+  }
+
+  async function cancelQueue() {
+    setMsg("");
+    try {
+      await apiPost("/api/queue/cancel", { cameraId: CAMERA_ID });
+      setMsg({
+  text: "Sessão encerrada.",
+  type: "success"
+});
+      await loadData();
+    } catch (error) {
+      console.error("QUEUE CANCEL ERROR:", error);
+      setMsg(error.message);
+    }
+  }
+
+
+  async function startSession() {
+    setMsg("");
+
+    if (!patientCode.trim()) {
+      setMsg({
+  text: "Introduza o código do paciente e o nº da Box antes de iniciar a sessão.",
+  type: "warning"
+});
+      return;
+    }
+
+    if (!box.trim()) {
+      setMsg("Introduza a box antes de iniciar.");
+      return;
+    }
+
+    try {
+      const data = await apiPost("/api/session/start", {
+        cameraId: CAMERA_ID,
+        patientCode: patientCode.trim(),
+        box: box.trim(),
+      });
+
+      if (data.started) {
+  setMsg({
+    text: `Sessão iniciada com sucesso. ID: ${data.sessionId}`,
+    type: "success",
+  });
+
+  setPendingResumeRecord(null);
+  setBox("");
+  setPatientCode("");
+} else {
+  setMsg({
+    text: "Não foi possível iniciar a sessão.",
+    type: "warning",
+  });
+}
+
+await loadData();
+
+    } catch (error) {
+      console.error("START SESSION ERROR:", error);
+      setMsg({
+  text: error.message,
+  type: "warning",
+});
+    }
+  }
+
+  async function pauseSession() {
+    setMsg("");
+    try {
+      const data = await apiPost("/api/session/pause", {
+        cameraId: CAMERA_ID,
+      });
+
+      
+ setMsg(
+  data.paused
+    ? { text: "Sessão pausada com sucesso.", type: "info" }
+    : { text: "Não foi possível pausar a sessão.", type: "warning" }
+);
+      await loadData();
+    } catch (error) {
+  console.error("PAUSE SESSION ERROR:", error);
+  setMsg({ text: error.message, type: "warning" });
+}
+  }
+
+async function resumeSession(record) {
+  setMsg({ text: "", type: "" });
+
+  try {
+    const data = await apiPost("/api/session/resume", {
+      cameraId: CAMERA_ID,
+      sessionId: record.id,
+    });
+
+    if (data.resumed) {
+      setMsg({
+        text: "Sessão retomada com sucesso.",
+        type: "success",
+      });
+
+      setPendingResumeRecord(null);
+      setBox("");
+      setPatientCode("");
+    } else {
+      setMsg({
+        text: "Não foi possível retomar a sessão.",
+        type: "warning",
+      });
+    }
+
+    await loadData();
+    closeRecordModal();
+  } catch (error) {
+    console.error("RESUME SESSION ERROR:", error);
+    setMsg({ text: error.message, type: "warning" });
+  }
+}
+
+  async function stopSession() {
+    setMsg("");
+    try {
+      const data = await apiPost("/api/session/stop", {
+        cameraId: CAMERA_ID,
+      });
+
+setMsg(
+  data.stopped
+    ? { text: "Sessão encerrada com sucesso.", type: "success" }
+    : { text: "Não foi possível encerrar a sessão.", type: "warning" }
+);
+      await loadData();
+    }catch (error) {
+  console.error("STOP SESSION ERROR:", error);
+  setMsg({ text: error.message, type: "warning" });
+}
+  }
+
+  async function uploadPhoto() {
+    setMsg("");
+
+    if (!selectedFile) {
+      setMsg("Seleciona uma fotografia primeiro.");
+      return;
+    }
+
+    if (!cameraState?.current_session_id) {
+      setMsg("Não existe sessão ativa para associar a fotografia.");
+      return;
+    }
+
+    try {
+      setUploadingPhoto(true);
+
+      const fileExt = selectedFile.name.split(".").pop();
+      const fileName = `${cameraState.current_session_id}/${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2)}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from(PHOTO_BUCKET)
+        .upload(fileName, selectedFile, {
+          upsert: false,
+        });
+
+      if (uploadError) {
+        throw new Error(uploadError.message);
+      }
+
+      const { error: insertError } = await supabase.from("session_photos").insert({
+        session_id: cameraState.current_session_id,
+        camera_id: CAMERA_ID,
+        user_id: currentUserId,
+        phase: photoPhase,
+        storage_path: fileName,
+      });
+
+      if (insertError) {
+        throw new Error(insertError.message);
+      }
+
+      setMsg("Fotografia carregada com sucesso.");
+      setSelectedFile(null);
+      await loadData();
+    } catch (error) {
+      console.error("UPLOAD PHOTO ERROR:", error);
+      setMsg(error.message);
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
+
+  async function openPhoto(path) {
+    const { data, error } = await supabase.storage
+      .from(PHOTO_BUCKET)
+      .createSignedUrl(path, 60);
+
+    if (error || !data?.signedUrl) {
+      setMsg("Não foi possível abrir a fotografia.");
+      return;
+    }
+
+    window.open(data.signedUrl, "_blank");
+  }
+
+  async function getSignedPhotoUrl(path) {
+  const { data, error } = await supabase.storage
+    .from(PHOTO_BUCKET)
+    .createSignedUrl(path, 60);
+
+  if (error || !data?.signedUrl) {
+    return null;
+  }
+
+  return data.signedUrl;
+}
+
+  async function openRecordModal(record) {
+  setSelectedRecord(record);
+
+  const { data: recordPhotos, error } = await supabase
+    .from("session_photos")
+    .select("*")
+    .eq("session_id", record.id)
+    .order("captured_at", { ascending: false });
+
+  if (error) {
+    console.error("Erro ao carregar fotos do registo:", error);
+    setSelectedRecordPhotos([]);
+    setPhotoPreviewMap({});
+  } else {
+    const photos = recordPhotos || [];
+    setSelectedRecordPhotos(photos);
+
+    const previewEntries = await Promise.all(
+      photos.map(async (photo) => {
+        const url = await getSignedPhotoUrl(photo.storage_path);
+        return [photo.id, url];
+      })
+    );
+
+    const previewMap = Object.fromEntries(previewEntries);
+    setPhotoPreviewMap(previewMap);
+  }
+
+  setIsRecordModalOpen(true);
+}
+async function updatePhase(phase) {
+  try {
+    const data = await apiPost("/api/camera/phase", {
+      cameraId: CAMERA_ID,
+      phase,
+    });
+
+    if (data.updated) {
+      setCurrentPhase(phase);
+      await loadData();
+    }
+  } catch (error) {
+    console.error("UPDATE PHASE ERROR:", error);
+    setMsg({
+      text: error.message,
+      type: "warning",
+    });
+  }
+}
+
+async function confirmStopSession() {
+  setShowStopConfirmModal(false);
+  await stopSession();
+}
+
+
+  function closeRecordModal() {
+    setIsRecordModalOpen(false);
+    setSelectedRecord(null);
+    setSelectedRecordPhotos([]);
+    setPhotoPreviewMap({});
+  }
+
+  return (
+    <div className="app-shell">
+      <div className="top-actions">
+        <div className="user-meta">
+          <div className="user-email">{session.user.email}</div>
+        </div>
+
+        <button className="soft-btn" onClick={() => navigate("/app")}>
+          Voltar
+        </button>
+
+        <button className="secondary-btn" onClick={logout}>
+          Sair
+        </button>
+      </div>
+
+      <section
+        className="card"
+        style={{
+          padding: "34px 36px",
+          marginBottom: 28,
+          background: "linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%)",
+        }}
+      >
+        <div className="badge badge-blue" style={{ width: "fit-content", marginBottom: 18 }}>
+          EM Capture
+        </div>
+
+        <h1
+          style={{
+            margin: 0,
+            color: "#1e4a8d",
+            fontSize: "2.7rem",
+            lineHeight: 1.05,
+            fontWeight: 800,
+          }}
+        >
+          Gestão da Câmara Clínica
+        </h1>
+
+        <p
+          style={{
+            marginTop: 18,
+            marginBottom: 0,
+            color: "#5f6b7a",
+            fontSize: "1.15rem",
+            maxWidth: 900,
+          }}
+        >
+          Gestão de fila, início direto da sessão, pausa, encerramento e
+          preparação para registo fotográfico estruturado.
+        </p>
+      </section>
+
+      <section
+        className="card"
+        style={{
+          padding: 26,
+          marginBottom: 28,
+          background: "linear-gradient(180deg, #ffffff 0%, #fbfcff 100%)",
+        }}
+      >
+        <h2 style={{ marginTop: 0, color: "#1e4a8d", fontSize: "1.7rem" }}>
+          Ações
+        </h2>
+
+        <p style={{ color: "#5f6b7a", marginTop: 8 }}>
+          Gestão da fila e controlo do ciclo da sessão.
+        </p>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+            gap: 18,
+            marginTop: 22,
+          }}
+        >
+          <div
+            style={{
+              padding: 20,
+              borderRadius: 20,
+              background: "#f8fafc",
+              border: "1px solid #e4e9f0",
+            }}
+          >
+            <div style={{ fontWeight: 800, color: "#1e4a8d", marginBottom: 14 }}>
+              Fila
+            </div>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <button className="primary-btn" onClick={joinQueue} disabled={!canManageQueue}>
+                Entrar na fila
+              </button>
+              <button className="secondary-btn" onClick={cancelQueue} disabled={!canManageQueue}>
+                Cancelar fila
+              </button>
+              <button className="soft-btn" onClick={loadData}>
+                Atualizar
+              </button>
+            </div>
+            
+
+            {isMyTurn && (
+              <div style={{ marginTop: 14, color: "#1e4a8d", fontWeight: 700 }}>
+                É a tua vez. O botão de início estará disponível após inserir o nº da Box e código do paciente.
+              </div>
+            )}
+
+            {turnExpired && (
+              <div style={{ marginTop: 14 }}>
+                <div style={{ color: "#c7952d", fontWeight: 700, marginBottom: 10 }}>
+                  O teu turno expirou. Podes entrar novamente na fila.
+                </div>
+
+                <button className="soft-btn" onClick={joinQueue}>
+                  Entrar novamente na fila
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div
+            style={{
+              padding: 20,
+              borderRadius: 20,
+              background: "#f8fafc",
+              border: "1px solid #e4e9f0",
+            }}
+          >
+            <div style={{ fontWeight: 800, color: "#1e4a8d", marginBottom: 14 }}>
+              Sessão
+            </div>
+
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <button className="primary-btn" onClick={startSession} disabled={!patientCode || !box}>
+                Iniciar
+              </button>
+
+              <button className="secondary-btn" onClick={pauseSession} disabled={!canPauseOrStop}>
+                Pausar
+              </button>
+<button
+  className="secondary-btn"
+  onClick={() => setShowStopConfirmModal(true)} disabled={!canPauseOrStop}
+>
+  Concluir
+</button>
+            </div>
+          </div>
+
+          
+
+          
+{showStopConfirmModal && (
+  <div
+    onClick={() => setShowStopConfirmModal(false)}
+    style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(15, 23, 42, 0.45)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 20,
+      zIndex: 9999,
+      backdropFilter: "blur(2px)",
+    }}
+  >
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        width: "100%",
+        maxWidth: 560,
+        background: "#ffffff",
+        borderRadius: 22,
+        padding: 28,
+        boxShadow: "0 30px 80px rgba(15, 23, 42, 0.22)",
+        border: "1px solid #eef2f7",
+      }}
+    >
+      <div
+        style={{
+          width: 62,
+          height: 62,
+          borderRadius: "50%",
+          background: "#fff4e5",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: "1.9rem",
+          marginBottom: 18,
+        }}
+      >
+        ⚠️
+      </div>
+
+      <h3
+        style={{
+          margin: 0,
+          marginBottom: 10,
+          color: "#1e4a8d",
+          fontSize: "1.45rem",
+          fontWeight: 800,
+        }}
+      >
+        Concluir sessão
+      </h3>
+
+      <p
+        style={{
+          margin: 0,
+          color: "#5f6b7a",
+          lineHeight: 1.7,
+          fontSize: "1rem",
+        }}
+      >
+        Pretende mesmo concluir esta sessão?
+        <br />
+        Confirme que já inseriu as fotografias associadas ao registo antes de continuar.
+      </p>
+
+      <div
+        style={{
+          marginTop: 24,
+          padding: "14px 16px",
+          borderRadius: 14,
+          background: "#f8fbff",
+          border: "1px solid #e3edf8",
+          color: "#48607a",
+          fontSize: "0.95rem",
+          lineHeight: 1.6,
+        }}
+      >
+        A sessão só será concluída se existirem fotografias associadas.
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          gap: 12,
+          flexWrap: "wrap",
+          marginTop: 26,
+        }}
+      >
+        <button
+          type="button"
+          className="secondary-btn"
+          onClick={() => setShowStopConfirmModal(false)}
+        >
+          Cancelar
+        </button>
+
+        <button
+          type="button"
+          className="primary-btn"
+          onClick={confirmStopSession}
+        >
+          Confirmar conclusão
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+          
+        </div>
+
+
+{msg.text && (
+  <p
+    style={{
+      fontWeight: 600,
+      marginTop: "10px",
+      color:
+        msg.type === "warning"
+          ? "#dc2626"
+          : msg.type === "success"
+          ? "#16a34a"
+          : "#2563eb"
+    }}
+  >
+    {msg.type === "warning" && "⚠️ "}
+    {msg.type === "success" && "✅ "}
+    {msg.type === "info" && "ℹ️ "}
+    {msg.text}
+  </p>
+)}
+  </section>
+
+      <section
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1.35fr 1fr",
+          gap: 24,
+          marginBottom: 28,
+        }}
+      >
+        <div
+          className="card"
+          style={{
+            padding: 26,
+            background: "linear-gradient(180deg, #ffffff 0%, #fbfcff 100%)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              gap: 16,
+              marginBottom: 18,
+              flexWrap: "wrap",
+            }}
+          >
+            <div>
+              <h2 style={{ margin: 0, color: "#1e4a8d", fontSize: "1.7rem" }}>
+                Estado da câmara
+              </h2>
+              <p style={{ margin: "8px 0 0 0", color: "#5f6b7a" }}>
+                Monitorização do estado atual do equipamento.
+              </p>
+            </div>
+
+            <div
+              style={{
+                background: statusMeta.bg,
+                color: statusMeta.color,
+                borderRadius: 999,
+                padding: "10px 18px",
+                fontWeight: 800,
+                fontSize: "0.95rem",
+              }}
+            >
+              {statusMeta.label}
+            </div>
+          </div>
+
+          {loading ? (
+            <p>A carregar...</p>
+          ) : (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                gap: 16,
+              }}
+            >
+              <div style={{ padding: 18, borderRadius: 18, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
+                <div style={{ color: "#7f8b99", marginBottom: 8 }}>Utilizador atual</div>
+                <div style={{ fontWeight: 700, color: "#17324d" }}>
+                  {profilesMap[cameraState?.current_user_id] ||
+                    cameraState?.current_user_id ||
+                    "—"}
+                </div>
+              </div>
+
+              <div style={{ padding: 18, borderRadius: 18, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
+                <div style={{ color: "#7f8b99", marginBottom: 8 }}>Box atual</div>
+                <div style={{ fontWeight: 700, color: "#17324d" }}>
+                  {cameraState?.current_box || "—"}
+                </div>
+              </div>
+
+              <div style={{ padding: 18, borderRadius: 18, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
+                <div style={{ color: "#7f8b99", marginBottom: 8 }}>Sessão atual</div>
+                <div style={{ fontWeight: 700, color: "#17324d", wordBreak: "break-word" }}>
+                  {cameraState?.current_session_id || "—"}
+                </div>
+              </div>
+
+              <div style={{ padding: 18, borderRadius: 18, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
+                <div style={{ color: "#7f8b99", marginBottom: 8 }}>Código do paciente</div>
+                <div style={{ fontWeight: 700, color: "#17324d" }}>
+                  {currentSession?.patient_code || "—"}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+        <div
+  style={{
+    marginTop: 18,
+    padding: 18,
+    border: "1px solid #dbe5f0",
+    borderRadius: 18,
+    background: "#f8fbff",
+  }}
+>
+  <div
+    style={{
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      gap: 12,
+      flexWrap: "wrap",
+      marginBottom: 14,
+    }}
+  >
+    <div>
+      <div
+        style={{
+          fontWeight: 800,
+          color: "#1e4a8d",
+          fontSize: "1rem",
+          marginBottom: 4,
+        }}
+      >
+        Fase da captura
+      </div>
+      <div style={{ color: "#6b7280", fontSize: "0.95rem" }}>
+        Define em que etapa as próximas fotografias devem ser associadas.
+      </div>
+    </div>
+
+    <div
+      style={{
+        padding: "8px 14px",
+        borderRadius: 999,
+        background: "#e9f2fd",
+        color: "#1e4a8d",
+        fontWeight: 700,
+      }}
+    >
+     Atual: {formatPhaseLabel(currentPhase)}
+    </div>
+  </div>
+
+  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+    <button
+      className={currentPhase === "before" ? "primary-btn" : "secondary-btn"}
+      onClick={() => updatePhase("before")}
+      type="button"
+    >
+      Inicial
+    </button>
+
+    <button
+      className={currentPhase === "during" ? "primary-btn" : "secondary-btn"}
+      onClick={() => updatePhase("during")}
+      type="button"
+    >
+      Durante
+    </button>
+
+    <button
+      className={currentPhase === "after" ? "primary-btn" : "secondary-btn"}
+      onClick={() => updatePhase("after")}
+      type="button"
+    >
+      Final
+    </button>
+  </div>
+</div>
+
+<div style={{ marginTop: 20 }}>
+  <h3 style={{ marginBottom: 10 }}>👩‍🏫 Professores com acesso</h3>
+
+  {/* Dropdown */}
+  <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+    <select
+      value={selectedTeacherId}
+      onChange={(e) => setSelectedTeacherId(e.target.value)}
+      style={{
+        padding: "10px",
+        borderRadius: "8px",
+        border: "1px solid #ccc",
+        minWidth: "220px",
+      }}
+    >
+      <option value="">Selecionar professor</option>
+
+      {teachers.map((t) => (
+        <option key={t.id} value={t.id}>
+          {t.full_name}
+        </option>
+      ))}
+    </select>
+
+    <button
+      onClick={() => assignTeacher(selectedRecord.id)}
+      style={{
+        padding: "10px 16px",
+        borderRadius: "8px",
+        border: "none",
+        background: "#2e7d32",
+        color: "white",
+        fontWeight: 600,
+        cursor: "pointer",
+      }}
+    >
+      Dar acesso
+    </button>
+  </div>
+
+  {/* Lista */}
+  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+    {sessionTeachers.length === 0 && (
+      <span style={{ color: "#777" }}>
+        Nenhum professor associado
+      </span>
+    )}
+
+    {sessionTeachers.map((item) => (
+      <div
+        key={item.id}
+        style={{
+          padding: "8px 12px",
+          background: "#f5f5f5",
+          borderRadius: "6px",
+        }}
+      >
+        {item.teacher?.full_name || "Professor"}
+      </div>
+    ))}
+  </div>
+</div>
+
+        <div
+          className="card"
+          style={{
+            padding: 26,
+            background: "linear-gradient(180deg, #ffffff 0%, #fbfcff 100%)",
+          }}
+        >
+          <h2 style={{ marginTop: 0, color: "#1e4a8d", fontSize: "1.7rem" }}>
+            Sessão clínica
+          </h2>
+
+          <p style={{ color: "#5f6b7a", marginTop: 8 }}>
+            Preparação da sessão ativa e carregamento de fotografias.
+          </p>
+
+          <div style={{ display: "grid", gap: 16, marginTop: 22 }}>
+            <div>
+              <label style={{ display: "block", marginBottom: 8, color: "#5f6b7a", fontWeight: 600 }}>
+                Box
+              </label>
+              <input value={box} onChange={(e) => setBox(e.target.value)} placeholder="Introduza a Box" />
+            </div>
+
+            <div>
+              <label style={{ display: "block", marginBottom: 8, color: "#5f6b7a", fontWeight: 600 }}>
+                Código do paciente
+              </label>
+              <input autoFocus value={patientCode} onChange={(e) => setPatientCode(e.target.value)} onKeyDown={(e) => {
+    if (e.key === "Enter") {
+      startSession();
+    }
+  }} placeholder="Introduza o código" />
+            </div>
+            
+
+            <div
+              style={{
+                padding: 16,
+                borderRadius: 16,
+                background: "#f8fafc",
+                border: "1px solid #e4e9f0",
+              }}
+            >
+              <div style={{ fontWeight: 700, color: "#1e4a8d", marginBottom: 8 }}>
+                Carregar fotografias
+              </div>
+              <div style={{ display: "grid", gap: 12 }}>
+                <select value={photoPhase} onChange={(e) => setPhotoPhase(e.target.value)}>
+                  <option value="before">Inicial</option>
+                  <option value="during">Durante</option>
+                  <option value="after">Final</option>
+                </select>
+
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                />
+
+                <button
+                  className="secondary-btn"
+                  onClick={uploadPhoto}
+                  disabled={!canUploadPhotos || uploadingPhoto}
+                >
+                  {uploadingPhoto ? "A carregar..." : "Carregar fotografia"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      
+
+      <section
+        className="card"
+        style={{
+          padding: 26,
+          marginBottom: 28,
+          background: "linear-gradient(180deg, #ffffff 0%, #fbfcff 100%)",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 16,
+            flexWrap: "wrap",
+            marginBottom: 18,
+          }}
+        >
+          <div>
+            <h2 style={{ margin: 0, color: "#1e4a8d", fontSize: "1.7rem" }}>
+              Fila ativa
+            </h2>
+            <p style={{ color: "#5f6b7a", margin: "8px 0 0 0" }}>
+              Utilizadores atualmente em espera ou notificados.
+            </p>
+          </div>
+        </div>
+        
+
+        {loading ? (
+          <p>A carregar fila...</p>
+        ) : queueEntries.length === 0 ? (
+          <p>Não há utilizadores na fila.</p>
+        ) : (
+          <div className="table-wrapper">
+            <table className="styled-table">
+              <thead>
+                <tr>
+                  <th>Posição</th>
+                  <th>Nome</th>
+                  <th>Box</th>
+                  <th>Estado</th>
+                  <th>Entrou em</th>
+                  <th>Notificado em</th>
+                </tr>
+              </thead>
+              <tbody>
+                {queueEntries.map((entry, index) => (
+                  <tr key={entry.id}>
+                    <td>{index + 1}</td>
+                    <td>{profilesMap[entry.user_id] || entry.user_id}</td>
+                    <td>{entry.current_box || "—"}</td>
+                    <td>
+                      <span
+                        className="status-pill"
+                        style={{
+                          background:
+                            entry.status === "notified" ? "#fdf2dc" : "#e8f2fd",
+                          color:
+                            entry.status === "notified" ? "#c7952d" : "#1e4a8d",
+                        }}
+                      >
+                        {entry.status}
+                      </span>
+                    </td>
+                    <td>
+                      {entry.joined_at
+                        ? new Date(entry.joined_at).toLocaleString()
+                        : "—"}
+                    </td>
+                    <td>
+                      {entry.notified_at
+                        ? new Date(entry.notified_at).toLocaleString()
+                        : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section
+        className="card"
+        style={{
+          padding: 26,
+          marginBottom: 28,
+          background: "linear-gradient(180deg, #ffffff 0%, #fbfcff 100%)",
+        }}
+      >
+        <div
+       
+        >
+        <div
+  style={{
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 16,
+    flexWrap: "wrap",
+    marginBottom: 18,
+  }}
+        >
+  <div>
+    <h2 style={{ margin: 0, color: "#1e4a8d", fontSize: "1.7rem" }}>
+      {recordsView === "all" ? "Todos os registos" : "Meus registos"}
+    </h2>
+    <p style={{ color: "#5f6b7a", margin: "8px 0 0 0" }}>
+      {recordsView === "all"
+        ? "Consulta global dos registos do módulo."
+        : "Consulta das tuas sessões clínicas e respetivas fotografias."}
+    </p>
+  </div>
+
+  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+    <button
+      className={recordsView === "mine" ? "primary-btn" : "soft-btn"}
+      onClick={() => setRecordsView("mine")}
+    >
+      Meus registos
+    </button>
+
+    {canViewAllRecords && (
+      <button
+        className={recordsView === "all" ? "primary-btn" : "soft-btn"}
+        onClick={() => setRecordsView("all")}
+      >
+        Todos os registos
+      </button>
+    )}
+  </div>
+</div>
+        
+
+         <div
+  style={{
+    display: "grid",
+    gridTemplateColumns: "repeat(5, minmax(140px, 1fr))",
+    gap: 12,
+    width: "100%",
+  }}
+>
+  <input
+    type="date"
+    value={filterDate}
+    onChange={(e) => setFilterDate(e.target.value)}
+  />
+  <input
+    type="text"
+    placeholder="Nome"
+    value={filterName}
+    onChange={(e) => setFilterName(e.target.value)}
+  />
+  <input
+    type="text"
+    placeholder="Cod paciente"
+    value={filterPatientCode}
+    onChange={(e) => setFilterPatientCode(e.target.value)}
+  />
+  <input
+    type="text"
+    placeholder="Box"
+    value={filterBox}
+    onChange={(e) => setFilterBox(e.target.value)}
+  />
+  <input
+    type="text"
+    placeholder="Estado"
+    value={filterStatus}
+    onChange={(e) => setFilterStatus(e.target.value)}
+  />
+</div>
+        </div>
+
+        {filteredRecords.length === 0 ? (
+          <p style={{ color: "#5f6b7a" }}>Ainda não existem registos para mostrar.</p>
+        ) : (
+          <div className="table-wrapper">
+            <table className="styled-table">
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Nome</th>
+                  <th>Cod paciente</th>
+                  <th>Box</th>
+                  <th>Estado</th>
+                  <th>Nº fotos</th>
+                  <th>Consultar</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredRecords.map((record) => (
+                  <tr key={record.id}>
+                    <td>
+                      {record.started_at
+                        ? new Date(record.started_at).toLocaleString()
+                        : "—"}
+                    </td>
+                    <td>{record.user_name || "—"}</td>
+                    <td>{record.patient_code || "—"}</td>
+                    <td>{record.box || "—"}</td>
+                    <td>{formatSessionStatus(record.status)}</td>
+                    <td>{record.photos_count}</td>
+                    <td>
+                      <button
+                        className="secondary-btn"
+                        onClick={() => openRecordModal(record)}
+                      >
+                        🔍
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {isRecordModalOpen && selectedRecord && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 24,
+            zIndex: 1000,
+          }}
+          onClick={closeRecordModal}
+        >
+          <div
+            className="card"
+            style={{
+              width: "min(1080px, 100%)",
+              maxHeight: "90vh",
+              overflowY: "auto",
+              padding: 28,
+              background: "#ffffff",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 16,
+                marginBottom: 22,
+              }}
+            >
+              <div>
+                <h2 style={{ margin: 0, color: "#1e4a8d" }}>Detalhes do registo</h2>
+                <p style={{ margin: "8px 0 0 0", color: "#5f6b7a" }}>
+                  Consulta do histórico fotográfico e informação da sessão.
+                </p>
+
+                {selectedRecord?.status === "paused" &&
+  selectedRecord?.user_id === currentUserId && (
+    <div style={{ marginBottom: 24, display: "flex", gap: 12, flexWrap: "wrap" }}>
+      {isMyTurn ? (
+        <button
+          className="primary-btn"
+          onClick={() => resumeSession(selectedRecord)}
+        >
+          Retomar sessão
+        </button>
+      ) : (
+        <button
+  className="secondary-btn"
+  onClick={async () => {
+    setPendingResumeRecord(selectedRecord);
+    await joinQueue();
+    closeRecordModal();
+  }}
+>
+  Entrar na fila para retomar
+</button>
+      )}
+    </div>
+  )}
+  
+              </div>
+
+              <button className="secondary-btn" onClick={closeRecordModal}>
+                Fechar
+              </button>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                gap: 16,
+                marginBottom: 24,
+              }}
+            >
+              <div style={{ padding: 16, borderRadius: 16, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
+                <strong>Data:</strong><br />
+                {selectedRecord.started_at
+                  ? new Date(selectedRecord.started_at).toLocaleString()
+                  : "—"}
+              </div>
+
+              <div style={{ padding: 16, borderRadius: 16, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
+                <strong>Nome:</strong><br />
+                {selectedRecord.user_name || "—"}
+              </div>
+
+              <div style={{ padding: 16, borderRadius: 16, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
+                <strong>Código  do Paciente:</strong><br />
+                {selectedRecord.patient_code || "—"}
+              </div>
+
+              <div style={{ padding: 16, borderRadius: 16, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
+                <strong>Box:</strong><br />
+                {selectedRecord.box || "—"}
+              </div>
+
+              <div style={{ padding: 16, borderRadius: 16, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
+                <strong>Estado:</strong><br />
+                {formatSessionStatus(selectedRecord.status)}
+              </div>
+
+              <div style={{ padding: 16, borderRadius: 16, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
+                <strong>ID da sessão:</strong><br />
+                {selectedRecord.id}
+              </div>
+            </div>
+            
+
+            <div>
+              <h3 style={{ color: "#1e4a8d", marginBottom: 16 }}>
+                Fotografias associadas
+              </h3>
+
+              {selectedRecordPhotos.length === 0 ? (
+                <p style={{ color: "#5f6b7a" }}>
+                  Este registo ainda não tem fotografias associadas.
+                </p>
+              ) : (
+                <div style={{ display: "grid", gap: 28 }}>
+                  {[
+  { key: "before", label: "Inicial" },
+  { key: "during", label: "Durante" },
+  { key: "after", label: "Final" },
+].map((section) => {
+  const phasePhotos = groupedSelectedRecordPhotos[section.key];
+
+  return (
+    <div key={section.key}>
+      <h4
+        style={{
+          color: "#1e4a8d",
+          marginBottom: 12,
+        }}
+      >
+        {section.label}
+      </h4>
+
+      {phasePhotos.length === 0 ? (
+        <p style={{ color: "#5f6b7a" }}>
+          Sem fotografias nesta categoria.
+        </p>
+      ) : (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+            gap: 16,
+          }}
+        >
+          {phasePhotos.map((photo) => (
+            <div
+              key={photo.id}
+              style={{
+                border: "1px solid #e4e9f0",
+                borderRadius: 18,
+                padding: 12,
+                background: "#f8fafc",
+              }}
+            >
+              <div
+                style={{
+                  width: "100%",
+                  aspectRatio: "4 / 3",
+                  borderRadius: 14,
+                  overflow: "hidden",
+                  background: "#eef3f8",
+                  marginBottom: 10,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                {photoPreviewMap[photo.id] ? (
+                  <img
+                    src={photoPreviewMap[photo.id]}
+                    alt={section.label}
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                      cursor: "pointer",
+                    }}
+                    onClick={() => openPhoto(photo.storage_path)}
+                  />
+                ) : (
+                  <span style={{ color: "#7f8b99", fontSize: "0.9rem" }}>
+                    Sem preview
+                  </span>
+                )}
+              </div>
+
+              <div
+                style={{
+                  color: "#5f6b7a",
+                  fontSize: "0.92rem",
+                  marginBottom: 10,
+                }}
+              >
+                {new Date(photo.captured_at).toLocaleString()}
+              </div>
+
+              <button
+                className="secondary-btn"
+                onClick={() => openPhoto(photo.storage_path)}
+                style={{ width: "100%" }}
+              >
+                Abrir fotografia
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+})}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      
+
+      {showTurnModal && isMyTurn && (
+  <div
+    style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(15, 23, 42, 0.45)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 24,
+      zIndex: 1200,
+    }}
+    onClick={() => setShowTurnModal(false)}
+  >
+    <div
+      className="card"
+      style={{
+        width: "min(560px, 100%)",
+        padding: 30,
+        background: "#ffffff",
+        textAlign: "center",
+      }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div
+        className="badge badge-blue"
+        style={{ width: "fit-content", margin: "0 auto 18px auto" }}
+      >
+        Notificação
+      </div>
+
+      <h2 style={{ marginTop: 0, color: "#1e4a8d", fontSize: "2rem" }}>
+        É a tua vez
+      </h2>
+
+      <p style={{ color: "#5f6b7a", fontSize: "1.05rem", marginBottom: 20 }}>
+        A câmara está reservada para ti. Podes iniciar a sessão agora.
+      </p>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+          gap: 14,
+          marginBottom: 22,
+          textAlign: "left",
+        }}
+      >
+        <div
+          style={{
+            padding: 14,
+            borderRadius: 14,
+            background: "#f8fafc",
+            border: "1px solid #e4e9f0",
+          }}
+        >
+          <strong>Box</strong>
+          <br />
+          {box || cameraState?.current_box || "—"}
+        </div>
+
+        <div
+          style={{
+            padding: 14,
+            borderRadius: 14,
+            background: "#f8fafc",
+            border: "1px solid #e4e9f0",
+          }}
+        >
+          <strong>Tempo limite</strong>
+          <br />
+          {myNotifiedEntry?.expires_at
+            ? new Date(myNotifiedEntry.expires_at).toLocaleTimeString()
+            : "—"}
+        </div>
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <button
+  className="primary-btn"
+  onClick={async () => {
+    setShowTurnModal(false);
+
+    if (pendingResumeRecord) {
+      await resumeSession(pendingResumeRecord);
+    } else {
+      await startSession();
+    }
+  }}
+>
+  {pendingResumeRecord ? "Retomar sessão" : "Iniciar sessão"}
+</button>
+
+        <button
+          className="secondary-btn"
+          onClick={() => setShowTurnModal(false)}
+        >
+          Fechar
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+    </div>
+
+
+  );
+}

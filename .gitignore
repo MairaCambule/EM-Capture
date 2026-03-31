@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.env
+*.log
+
+backend/node_modules/
+frontend/node_modules/
+watcher/node_modules/
+
+incoming/
+processed/
+error/
+
+.vscode/
+.DS_Store
+
+2019_01_18.lnk
