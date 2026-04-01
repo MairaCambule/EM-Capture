@@ -4,6 +4,40 @@ import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 import multer from "multer";
 
+import jwt from "jsonwebtoken";
+
+async function requireAuth(req, res, next) {
+  try {
+    const authHeader = req.headers.authorization || "";
+
+    if (!authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const token = authHeader.replace("Bearer ", "").trim();
+
+    // 🔥 VERIFICAR JWT diretamente
+    const decoded = jwt.decode(token);
+
+    if (!decoded || !decoded.sub) {
+      return res.status(401).json({ error: "Invalid token" });
+    }
+
+    // 🔥 Buscar user real no Supabase
+    const { data, error } = await supabaseAdmin.auth.admin.getUserById(decoded.sub);
+
+    if (error || !data?.user) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    req.user = data.user;
+    next();
+  } catch (err) {
+    console.error("AUTH ERROR:", err);
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+}
+
 dotenv.config();
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -43,29 +77,6 @@ function getBearerToken(req) {
   return auth.startsWith("Bearer ") ? auth.slice(7) : null;
 }
 
-async function requireAuth(req, res, next) {
-  try {
-    const authHeader = req.headers.authorization || "";
-
-    if (!authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
-
-    const token = authHeader.replace("Bearer ", "").trim();
-
-    const { data, error } = await supabase.auth.getUser(token);
-
-    if (error || !data?.user) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
-
-    req.user = data.user;
-    next();
-  } catch (err) {
-    console.error("AUTH ERROR:", err);
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-}
 
 app.get("/health", (_, res) => res.json({ ok: true }));
 
