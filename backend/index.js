@@ -4,9 +4,8 @@ import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 import multer from "multer";
 
-//import jwt from "jsonwebtoken";
-
-const jwt = require("jsonwebtoken");
+import jwt from "jsonwebtoken";
+//const jwt = require("jsonwebtoken");
 
 async function requireAuth(req, res, next) {
   try {
@@ -732,7 +731,7 @@ app.get("/api/session/:sessionId/teachers", requireAuth, async (req, res) => {
   }
 });
 
-const listenPort = PORT || 3001;
+const listenPort = process.env.PORT || 3001;
 app.listen(listenPort, () => {
   console.log(`API running on http://localhost:${listenPort}`);
 });
