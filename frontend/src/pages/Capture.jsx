@@ -135,9 +135,12 @@ const API_BASE_URL = import.meta.env.VITE_API_URL;
     cameraState?.status === "in_use" &&
     cameraState?.current_user_id === currentUserId;
 
-    console.log("session:", session);
-console.log("access token exists:", !!session?.access_token);
-console.log("API_BASE_URL:", API_BASE_URL);
+  console.log("session:", session);
+  console.log("access token exists:", !!session?.access_token);
+  console.log("API_BASE_URL:", API_BASE_URL);
+
+  console.log("CAMERA_ID:", CAMERA_ID);
+
 
   const canManageQueue = !isCurrentUserUsingCamera;
 
@@ -605,15 +608,8 @@ async function apiGet(path) {
 
 async function loadTeachers() {
   try {
-    const res = await axios.get(`${API_BASE_URL}/api/teachers`, {
-      headers: {
-        Authorization:`Bearer ${session?.access_token}`,
-      },
-    });
-
-    console.log("Teachers:", res.data);
-
-    setTeachers(res.data || []);
+    const data = await apiGet("/api/teachers");
+    setTeachers(data.teachers || []);
   } catch (error) {
     console.error("Erro ao carregar professores:", error);
   }
@@ -792,20 +788,20 @@ useEffect(() => {
     }
   }
 
-  async function cancelQueue() {
-    setMsg("");
-    try {
-      await apiPost("/api/queue/cancel", { cameraId: CAMERA_ID });
-      setMsg({
-  text: "Sessão encerrada.",
-  type: "success"
-});
-      await loadData();
-    } catch (error) {
-      console.error("QUEUE CANCEL ERROR:", error);
-      setMsg(error.message);
-    }
+async function cancelQueue() {
+  setMsg("");
+  try {
+    await apiPost("/api/queue/cancel", { cameraId: CAMERA_ID });
+    setMsg({
+      text: "Saíste da fila com sucesso.",
+      type: "success",
+    });
+    await loadData();
+  } catch (error) {
+    console.error("QUEUE CANCEL ERROR:", error);
+    setMsg(error.message);
   }
+}
 
 
   async function startSession() {
