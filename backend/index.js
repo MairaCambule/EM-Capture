@@ -4,7 +4,9 @@ import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 import multer from "multer";
 
-import jwt from "jsonwebtoken";
+//import jwt from "jsonwebtoken";
+
+const jwt = require("jsonwebtoken");
 
 async function requireAuth(req, res, next) {
   try {
