@@ -14,18 +14,28 @@ app.use(express.json());
 
 const PHOTO_BUCKET = "clinical-photos";
 
-const { SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, PORT } =
+/*const { SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, PORT } =
   process.env;
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
   throw new Error(
     "Missing env vars. Check SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY"
   );
-}
+}*/
+
+
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 
 const supabaseAdmin = createClient(
   SUPABASE_URL,
   SUPABASE_SERVICE_ROLE_KEY
+);
+
+const supabaseAuth = createClient(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY
 );
 
 function getBearerToken(req) {
@@ -35,36 +45,25 @@ function getBearerToken(req) {
 
 async function requireAuth(req, res, next) {
   try {
-    const token = getBearerToken(req);
+    const authHeader = req.headers.authorization || "";
 
-    if (!token) {
-      return res.status(401).json({ error: "Missing Bearer token" });
+    if (!authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized" });
     }
 
-    const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      },
-    });
+    const token = authHeader.replace("Bearer ", "").trim();
 
-    const { data, error } = await supabaseAuth.auth.getUser(token);
+    const { data, error } = await supabase.auth.getUser(token);
 
     if (error || !data?.user) {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
     req.user = data.user;
-    req.accessToken = token;
-    req.supabaseUser = supabaseAuth;
-
     next();
-  } catch (e) {
-    return res.status(401).json({
-      error: "Unauthorized",
-      details: String(e.message || e),
-    });
+  } catch (err) {
+    console.error("AUTH ERROR:", err);
+    return res.status(401).json({ error: "Unauthorized" });
   }
 }
 
