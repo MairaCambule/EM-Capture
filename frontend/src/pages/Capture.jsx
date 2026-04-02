@@ -267,17 +267,14 @@ const filteredRecords = activeRecordsSource.filter((record) => {
   });
 
   const text = await response.text();
+console.log("RAW RESPONSE:", text);
 
-  let data;
-  try {
-    data = JSON.parse(text);
-  } catch {
-    throw new Error("O backend devolveu uma resposta inválida.");
-  }
-
-  if (!response.ok) {
-    throw new Error(data.error || "Erro na operação.");
-  }
+let data;
+try {
+  data = JSON.parse(text);
+} catch {
+  throw new Error("O backend devolveu uma resposta inválida.");
+}
 
   return data;
 }

@@ -290,21 +290,28 @@ app.post("/api/session/start", requireAuth, async (req, res) => {
 });
 
 app.post("/api/session/pause", requireAuth, async (req, res) => {
-  const { cameraId } = req.body;
+  try {
+    const { cameraId } = req.body;
 
-  if (!cameraId) {
-    return res.status(400).json({ error: "cameraId is required" });
+    if (!cameraId) {
+      return res.status(400).json({ error: "cameraId is required" });
+    }
+
+    const { data, error } = await supabaseAdmin.rpc("pause_session", {
+      p_camera_id: cameraId,
+    });
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+
+    return res.json({ paused: data });
+  } catch (error) {
+    console.error("PAUSE SESSION ERROR:", error);
+    return res.status(500).json({
+      error: error.message || "Erro ao pausar sessão.",
+    });
   }
-
-  const { data, error } = await req.supabaseUser.rpc("pause_session", {
-    p_camera_id: cameraId,
-  });
-
-  if (error) {
-    return res.status(400).json({ error: error.message });
-  }
-
-  return res.json({ paused: data });
 });
 
 app.post("/api/session/resume", requireAuth, async (req, res) => {
@@ -736,3 +743,4 @@ app.listen(listenPort, () => {
   console.log(`API running on http://localhost:${listenPort}`);
 });
 
+console.log("SERVICE ROLE KEY EXISTS:", !!SUPABASE_SERVICE_ROLE_KEY);
