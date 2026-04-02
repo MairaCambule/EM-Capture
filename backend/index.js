@@ -12,20 +12,12 @@ async function requireAuth(req, res, next) {
     const authHeader = req.headers.authorization || "";
 
     if (!authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({ error: "Unauthorized" });
+      return res.status(401).json({ error: "No token provided" });
     }
 
-    const token = authHeader.replace("Bearer ", "").trim();
+    const token = authHeader.replace("Bearer ", "");
 
-    // 🔥 VERIFICAR JWT diretamente
-    const decoded = jwt.decode(token);
-
-    if (!decoded || !decoded.sub) {
-      return res.status(401).json({ error: "Invalid token" });
-    }
-
-    // 🔥 Buscar user real no Supabase
-    const { data, error } = await supabaseAdmin.auth.admin.getUserById(decoded.sub);
+    const { data, error } = await supabase.auth.getUser(token);
 
     if (error || !data?.user) {
       return res.status(401).json({ error: "Unauthorized" });
@@ -35,7 +27,7 @@ async function requireAuth(req, res, next) {
     next();
   } catch (err) {
     console.error("AUTH ERROR:", err);
-    return res.status(401).json({ error: "Unauthorized" });
+    return res.status(401).json({ error: "Invalid token" });
   }
 }
 
@@ -63,9 +55,9 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 
-const supabaseAdmin = createClient(
-  SUPABASE_URL,
-  SUPABASE_SERVICE_ROLE_KEY
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
 );
 
 const supabaseAuth = createClient(
