@@ -95,6 +95,13 @@ const API_BASE_URL = import.meta.env.VITE_API_URL;
   setupRealtimeAuth();
 }, []);
 
+useEffect(() => {
+  if (!session?.access_token || !CAMERA_ID) return;
+
+  loadData();
+}, [session?.access_token, CAMERA_ID, loadData]);
+
+
   const currentUserId = session?.user?.id;
 
   const myNotifiedEntry = queueEntries.find(
@@ -609,6 +616,7 @@ async function loadTeachers() {
     setTeachers(data.teachers || []);
   } catch (error) {
     console.error("Erro ao carregar professores:", error);
+    setTeachers([]);
   }
 }
 
@@ -646,14 +654,14 @@ async function assignTeacher(sessionId) {
 }
 
 useEffect(() => {
-  if (selectedRecord?.id) {
-    loadTeachers();
-    loadSessionTeachers(selectedRecord.id);
-  }
-}, [selectedRecord]);
+  if (!session?.access_token) return;
+  //loadTeachers();   - temporario
+}, [session]);
 
 
  useEffect(() => {
+  if (!session?.access_token || !CAMERA_ID) return;
+
   const channel = supabase
     .channel(`em-capture-${CAMERA_ID}`)
     .on(
@@ -698,14 +706,16 @@ useEffect(() => {
   return () => {
     supabase.removeChannel(channel);
   };
-}, [loadData]);
+}, [session?.access_token, CAMERA_ID, loadData]);
 
 useEffect(() => {
+  if (!session?.access_token || !CAMERA_ID) return;
+
   const shouldPoll =
     cameraState?.status === "reserved" ||
     cameraState?.status === "available" ||
-    queueEntries.some((entry) =>
-      entry.status === "waiting" || entry.status === "notified"
+    queueEntries.some(
+      (entry) => entry.status === "waiting" || entry.status === "notified"
     );
 
   if (!shouldPoll) {
@@ -718,7 +728,8 @@ useEffect(() => {
   }, 10000);
 
   return () => clearInterval(interval);
-}, [cameraState, queueEntries, loadData]);
+}, [session?.access_token, CAMERA_ID, cameraState, queueEntries, loadData]);
+
 
   useEffect(() => {
     async function handleExpiredTurn() {
