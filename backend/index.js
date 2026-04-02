@@ -17,7 +17,14 @@ async function requireAuth(req, res, next) {
 
     const token = authHeader.replace("Bearer ", "").trim();
 
+    console.log("AUTH HEADER:", authHeader);
+    console.log("TOKEN EXISTS:", !!token);
+    console.log("USING supabaseAuth:", !!supabaseAuth);
+
     const { data, error } = await supabaseAuth.auth.getUser(token);
+
+    console.log("AUTH DATA USER:", data?.user?.id);
+    console.log("AUTH ERROR:", error);
 
     if (error || !data?.user) {
       return res.status(401).json({ error: "Unauthorized" });
