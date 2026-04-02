@@ -654,8 +654,8 @@ app.get("/api/teachers", requireAuth, async (req, res) => {
     console.error("GET TEACHERS ERROR:", err);
     return res.status(500).json({ error: "Erro ao obter professores." });
   }
-  console.log("Teachers:", res.data);
 });
+
 
 app.post("/api/session/assign-teacher", requireAuth, async (req, res) => {
   try {
