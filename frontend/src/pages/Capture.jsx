@@ -81,6 +81,9 @@ const API_BASE_URL = import.meta.env.VITE_API_URL;
 
   const [pendingResumeRecord, setPendingResumeRecord] = useState(null);
 
+  const currentUserId = session?.user?.id;
+
+
   useEffect(() => {
   async function setupRealtimeAuth() {
     const {
@@ -95,14 +98,244 @@ const API_BASE_URL = import.meta.env.VITE_API_URL;
   setupRealtimeAuth();
 }, []);
 
+
+  const loadData = useCallback(async () => {
+  try {
+    setLoading(true);
+
+    await syncQueueState();
+
+    const { data: stateData, error: stateError } = await supabase
+      .from("camera_state")
+      .select("*")
+      .eq("camera_id", CAMERA_ID)
+      .single();
+
+    if (stateError) {
+      console.error("Erro ao carregar camera_state:", stateError);
+      return;
+    }
+
+    setCameraState(stateData);
+
+    setCurrentPhase(stateData?.current_phase || "during");
+
+    const { data: queueData, error: queueError } = await supabase
+      .from("queue_entries")
+      .select("*")
+      .eq("camera_id", CAMERA_ID)
+      .in("status", ["waiting", "notified"])
+      .order("joined_at", { ascending: true });
+
+    if (queueError) {
+      console.error("Erro ao carregar fila:", queueError);
+    }
+
+    const safeQueue = queueData || [];
+    setQueueEntries(safeQueue);
+
+    const { data: profileData, error: profileError } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", currentUserId)
+      .single();
+
+    if (profileError) {
+      console.error("Erro ao carregar profile:", profileError);
+    } else {
+      setProfile(profileData);
+    }
+
+    const { data: moduleData, error: moduleError } = await supabase
+      .from("user_module_access")
+      .select(`
+        role,
+        platform_modules (
+          code
+        )
+      `)
+      .eq("user_id", currentUserId);
+
+    let currentModuleRole = "user";
+
+    if (moduleError) {
+      console.error("Erro ao carregar role do módulo:", moduleError);
+    } else {
+      currentModuleRole =
+        (moduleData || []).find(
+          (item) => item.platform_modules?.code === "em_capture"
+        )?.role || "user";
+
+      setModuleRole(currentModuleRole);
+    }
+
+    if (stateData?.current_session_id) {
+      const { data: sessionData, error: sessionError } = await supabase
+        .from("clinical_sessions")
+        .select("*")
+        .eq("id", stateData.current_session_id)
+        .maybeSingle();
+
+      if (!sessionError) {
+        setCurrentSession(sessionData || null);
+      } else {
+        setCurrentSession(null);
+      }
+    } else {
+      setCurrentSession(null);
+    }
+
+    // Buscar todos os user_id possíveis para montar o mapa de nomes
+    const { data: allSessionsForNames, error: allSessionsForNamesError } =
+      await supabase.from("clinical_sessions").select("user_id");
+
+    if (allSessionsForNamesError) {
+      console.error(
+        "Erro ao carregar user_ids de clinical_sessions:",
+        allSessionsForNamesError
+      );
+    }
+
+    const ids = [
+      ...new Set(
+        [
+          ...safeQueue.map((q) => q.user_id),
+          ...(allSessionsForNames || []).map((s) => s.user_id),
+          stateData?.current_user_id,
+          currentUserId,
+        ].filter(Boolean)
+      ),
+    ];
+
+    let localProfilesMap = {};
+
+    if (ids.length > 0) {
+      const { data: profilesData, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id, full_name")
+        .in("id", ids);
+
+      if (profilesError) {
+        console.error("Erro ao carregar profiles:", profilesError);
+      } else {
+        (profilesData || []).forEach((p) => {
+          localProfilesMap[p.id] = p.full_name || p.id;
+        });
+
+        setProfilesMap(localProfilesMap);
+      }
+    } else {
+      setProfilesMap({});
+    }
+
+    // Meus registos
+    const { data: sessionsData, error: sessionsError } = await supabase
+      .from("clinical_sessions")
+      .select("*")
+      .eq("user_id", currentUserId)
+      .order("started_at", { ascending: false });
+
+    if (sessionsError) {
+      console.error("Erro ao carregar meus registos:", sessionsError);
+      setMyRecords([]);
+    } else {
+      const sessions = sessionsData || [];
+
+      if (sessions.length === 0) {
+        setMyRecords([]);
+      } else {
+        const sessionIds = sessions.map((s) => s.id);
+
+        const { data: photosData, error: photosError } = await supabase
+          .from("session_photos")
+          .select("session_id, id")
+          .in("session_id", sessionIds);
+
+        if (photosError) {
+          console.error("Erro ao carregar contagem de fotos:", photosError);
+        }
+
+        const photoCountMap = {};
+        (photosData || []).forEach((photo) => {
+          photoCountMap[photo.session_id] =
+            (photoCountMap[photo.session_id] || 0) + 1;
+        });
+
+        const records = sessions.map((sessionItem) => ({
+          ...sessionItem,
+          user_name: localProfilesMap[sessionItem.user_id] || sessionItem.user_id,
+          photos_count: photoCountMap[sessionItem.id] || 0,
+        }));
+
+        setMyRecords(records);
+      }
+    }
+
+    // Todos os registos (apenas para admins)
+    if (
+      profileData?.role === "global_admin" ||
+      currentModuleRole === "module_admin"
+    ) {
+      const { data: allSessionsData, error: allSessionsError } = await supabase
+        .from("clinical_sessions")
+        .select("*")
+        .order("started_at", { ascending: false });
+
+      if (allSessionsError) {
+        console.error("Erro ao carregar todos os registos:", allSessionsError);
+        setAllRecords([]);
+      } else {
+        const allSessions = allSessionsData || [];
+
+        if (allSessions.length === 0) {
+          setAllRecords([]);
+        } else {
+          const allSessionIds = allSessions.map((s) => s.id);
+
+          const { data: allPhotosData, error: allPhotosError } = await supabase
+            .from("session_photos")
+            .select("session_id, id")
+            .in("session_id", allSessionIds);
+
+          if (allPhotosError) {
+            console.error(
+              "Erro ao carregar contagem global de fotos:",
+              allPhotosError
+            );
+          }
+
+          const allPhotoCountMap = {};
+          (allPhotosData || []).forEach((photo) => {
+            allPhotoCountMap[photo.session_id] =
+              (allPhotoCountMap[photo.session_id] || 0) + 1;
+          });
+
+          const allRecordsMapped = allSessions.map((sessionItem) => ({
+            ...sessionItem,
+            user_name:
+              localProfilesMap[sessionItem.user_id] || sessionItem.user_id,
+            photos_count: allPhotoCountMap[sessionItem.id] || 0,
+          }));
+
+          setAllRecords(allRecordsMapped);
+        }
+      }
+    } else {
+      setAllRecords([]);
+    }
+  } catch (error) {
+    console.error("Erro ao carregar dados:", error);
+  } finally {
+    setLoading(false);
+  }
+}, [currentUserId]);
+
 useEffect(() => {
   if (!session?.access_token || !CAMERA_ID) return;
 
   loadData();
 }, [session?.access_token, CAMERA_ID, loadData]);
 
-
-  const currentUserId = session?.user?.id;
 
   const myNotifiedEntry = queueEntries.find(
     (entry) => entry.user_id === currentUserId && entry.status === "notified"
@@ -344,237 +577,6 @@ async function apiGet(path) {
   }
 }
 
-  const loadData = useCallback(async () => {
-  try {
-    setLoading(true);
-
-    await syncQueueState();
-
-    const { data: stateData, error: stateError } = await supabase
-      .from("camera_state")
-      .select("*")
-      .eq("camera_id", CAMERA_ID)
-      .single();
-
-    if (stateError) {
-      console.error("Erro ao carregar camera_state:", stateError);
-      return;
-    }
-
-    setCameraState(stateData);
-
-    setCurrentPhase(stateData?.current_phase || "during");
-
-    const { data: queueData, error: queueError } = await supabase
-      .from("queue_entries")
-      .select("*")
-      .eq("camera_id", CAMERA_ID)
-      .in("status", ["waiting", "notified"])
-      .order("joined_at", { ascending: true });
-
-    if (queueError) {
-      console.error("Erro ao carregar fila:", queueError);
-    }
-
-    const safeQueue = queueData || [];
-    setQueueEntries(safeQueue);
-
-    const { data: profileData, error: profileError } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", currentUserId)
-      .single();
-
-    if (profileError) {
-      console.error("Erro ao carregar profile:", profileError);
-    } else {
-      setProfile(profileData);
-    }
-
-    const { data: moduleData, error: moduleError } = await supabase
-      .from("user_module_access")
-      .select(`
-        role,
-        platform_modules (
-          code
-        )
-      `)
-      .eq("user_id", currentUserId);
-
-    let currentModuleRole = "user";
-
-    if (moduleError) {
-      console.error("Erro ao carregar role do módulo:", moduleError);
-    } else {
-      currentModuleRole =
-        (moduleData || []).find(
-          (item) => item.platform_modules?.code === "em_capture"
-        )?.role || "user";
-
-      setModuleRole(currentModuleRole);
-    }
-
-    if (stateData?.current_session_id) {
-      const { data: sessionData, error: sessionError } = await supabase
-        .from("clinical_sessions")
-        .select("*")
-        .eq("id", stateData.current_session_id)
-        .maybeSingle();
-
-      if (!sessionError) {
-        setCurrentSession(sessionData || null);
-      } else {
-        setCurrentSession(null);
-      }
-    } else {
-      setCurrentSession(null);
-    }
-
-    // Buscar todos os user_id possíveis para montar o mapa de nomes
-    const { data: allSessionsForNames, error: allSessionsForNamesError } =
-      await supabase.from("clinical_sessions").select("user_id");
-
-    if (allSessionsForNamesError) {
-      console.error(
-        "Erro ao carregar user_ids de clinical_sessions:",
-        allSessionsForNamesError
-      );
-    }
-
-    const ids = [
-      ...new Set(
-        [
-          ...safeQueue.map((q) => q.user_id),
-          ...(allSessionsForNames || []).map((s) => s.user_id),
-          stateData?.current_user_id,
-          currentUserId,
-        ].filter(Boolean)
-      ),
-    ];
-
-    let localProfilesMap = {};
-
-    if (ids.length > 0) {
-      const { data: profilesData, error: profilesError } = await supabase
-        .from("profiles")
-        .select("id, full_name")
-        .in("id", ids);
-
-      if (profilesError) {
-        console.error("Erro ao carregar profiles:", profilesError);
-      } else {
-        (profilesData || []).forEach((p) => {
-          localProfilesMap[p.id] = p.full_name || p.id;
-        });
-
-        setProfilesMap(localProfilesMap);
-      }
-    } else {
-      setProfilesMap({});
-    }
-
-    // Meus registos
-    const { data: sessionsData, error: sessionsError } = await supabase
-      .from("clinical_sessions")
-      .select("*")
-      .eq("user_id", currentUserId)
-      .order("started_at", { ascending: false });
-
-    if (sessionsError) {
-      console.error("Erro ao carregar meus registos:", sessionsError);
-      setMyRecords([]);
-    } else {
-      const sessions = sessionsData || [];
-
-      if (sessions.length === 0) {
-        setMyRecords([]);
-      } else {
-        const sessionIds = sessions.map((s) => s.id);
-
-        const { data: photosData, error: photosError } = await supabase
-          .from("session_photos")
-          .select("session_id, id")
-          .in("session_id", sessionIds);
-
-        if (photosError) {
-          console.error("Erro ao carregar contagem de fotos:", photosError);
-        }
-
-        const photoCountMap = {};
-        (photosData || []).forEach((photo) => {
-          photoCountMap[photo.session_id] =
-            (photoCountMap[photo.session_id] || 0) + 1;
-        });
-
-        const records = sessions.map((sessionItem) => ({
-          ...sessionItem,
-          user_name: localProfilesMap[sessionItem.user_id] || sessionItem.user_id,
-          photos_count: photoCountMap[sessionItem.id] || 0,
-        }));
-
-        setMyRecords(records);
-      }
-    }
-
-    // Todos os registos (apenas para admins)
-    if (
-      profileData?.role === "global_admin" ||
-      currentModuleRole === "module_admin"
-    ) {
-      const { data: allSessionsData, error: allSessionsError } = await supabase
-        .from("clinical_sessions")
-        .select("*")
-        .order("started_at", { ascending: false });
-
-      if (allSessionsError) {
-        console.error("Erro ao carregar todos os registos:", allSessionsError);
-        setAllRecords([]);
-      } else {
-        const allSessions = allSessionsData || [];
-
-        if (allSessions.length === 0) {
-          setAllRecords([]);
-        } else {
-          const allSessionIds = allSessions.map((s) => s.id);
-
-          const { data: allPhotosData, error: allPhotosError } = await supabase
-            .from("session_photos")
-            .select("session_id, id")
-            .in("session_id", allSessionIds);
-
-          if (allPhotosError) {
-            console.error(
-              "Erro ao carregar contagem global de fotos:",
-              allPhotosError
-            );
-          }
-
-          const allPhotoCountMap = {};
-          (allPhotosData || []).forEach((photo) => {
-            allPhotoCountMap[photo.session_id] =
-              (allPhotoCountMap[photo.session_id] || 0) + 1;
-          });
-
-          const allRecordsMapped = allSessions.map((sessionItem) => ({
-            ...sessionItem,
-            user_name:
-              localProfilesMap[sessionItem.user_id] || sessionItem.user_id,
-            photos_count: allPhotoCountMap[sessionItem.id] || 0,
-          }));
-
-          setAllRecords(allRecordsMapped);
-        }
-      }
-    } else {
-      setAllRecords([]);
-    }
-  } catch (error) {
-    console.error("Erro ao carregar dados:", error);
-  } finally {
-    setLoading(false);
-  }
-}, [currentUserId]);
-
   useEffect(() => {
     loadData();
   }, [loadData]);
@@ -718,9 +720,7 @@ useEffect(() => {
       (entry) => entry.status === "waiting" || entry.status === "notified"
     );
 
-  if (!shouldPoll) {
-    return;
-  }
+  if (!shouldPoll) return;
 
   const interval = setInterval(async () => {
     await syncQueueState();
