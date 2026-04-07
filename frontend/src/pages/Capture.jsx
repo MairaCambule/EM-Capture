@@ -612,7 +612,7 @@ async function apiGet(path) {
   }
 }
 
-async function loadTeachers() {
+/*async function loadTeachers() {
   try {
     const data = await apiGet("/api/teachers");
     setTeachers(data.teachers || []);
@@ -621,7 +621,7 @@ async function loadTeachers() {
     setTeachers([]);
   }
 }
-
+*/
 
 async function loadSessionTeachers(sessionId) {
   try {
