@@ -481,7 +481,7 @@ const filteredRecords = activeRecordsSource.filter((record) => {
   const statusMeta = getStatusMeta(cameraState?.status);
 
 
-  axios.get(`${API_BASE_URL}/api/teachers`)
+  //axios.get(`${API_BASE_URL}/api/teachers`)
   
   async function logout() {
     await supabase.auth.signOut();
@@ -621,7 +621,7 @@ async function apiGet(path) {
     setTeachers([]);
   }
 }
-*/
+
 
 async function loadSessionTeachers(sessionId) {
   try {
@@ -654,6 +654,7 @@ async function assignTeacher(sessionId) {
     console.error("Erro ao associar professor:", err);
   }
 }
+  */
 
 useEffect(() => {
   if (!session?.access_token) return;
@@ -1534,7 +1535,7 @@ async function confirmStopSession() {
   <h3 style={{ marginBottom: 10 }}>👩‍🏫 Professores com acesso</h3>
 
   {/* Dropdown */}
-  <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+  {/*<div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
     <select
       value={selectedTeacherId}
       onChange={(e) => setSelectedTeacherId(e.target.value)}
@@ -1569,9 +1570,10 @@ async function confirmStopSession() {
       Dar acesso
     </button>
   </div>
+*/}
 
   {/* Lista */}
-  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+    {/*<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
     {sessionTeachers.length === 0 && (
       <span style={{ color: "#777" }}>
         Nenhum professor associado
@@ -1591,6 +1593,7 @@ async function confirmStopSession() {
       </div>
     ))}
   </div>
+  */}
 </div>
 
         <div
