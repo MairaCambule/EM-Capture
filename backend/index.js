@@ -4,15 +4,52 @@ import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 import multer from "multer";
 
-import jwt from "jsonwebtoken";
+dotenv.config();
 
-//import { createClient } from "@supabase/supabase-js";
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+const upload = multer({ storage: multer.memoryStorage() });
+
+const PHOTO_BUCKET = "clinical-photos";
+
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !SUPABASE_ANON_KEY) {
+  throw new Error(
+    "Missing env vars. Check SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY"
+  );
+}
 
 const supabaseAdmin = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
+  SUPABASE_URL,
+  SUPABASE_SERVICE_ROLE_KEY
 );
-//const jwt = require("jsonwebtoken");
+
+const supabaseAuth = createClient(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY
+);
+
+function getBearerToken(req) {
+  const auth = req.headers.authorization || "";
+  return auth.startsWith("Bearer ") ? auth.slice(7) : null;
+}
+
+function getAuthedSupabase(req) {
+  const token = getBearerToken(req);
+
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  });
+}
 
 async function requireAuth(req, res, next) {
   try {
@@ -24,14 +61,7 @@ async function requireAuth(req, res, next) {
 
     const token = authHeader.replace("Bearer ", "").trim();
 
-    console.log("AUTH HEADER:", authHeader);
-    console.log("TOKEN EXISTS:", !!token);
-    console.log("USING supabaseAuth:", !!supabaseAuth);
-
     const { data, error } = await supabaseAuth.auth.getUser(token);
-
-    console.log("AUTH DATA USER:", data?.user?.id);
-    console.log("AUTH ERROR:", error);
 
     if (error || !data?.user) {
       return res.status(401).json({ error: "Unauthorized" });
@@ -45,123 +75,110 @@ async function requireAuth(req, res, next) {
   }
 }
 
-dotenv.config();
-
-const upload = multer({ storage: multer.memoryStorage() });
-
-const app = express();
-app.use(cors());
-app.use(express.json());
-
-const PHOTO_BUCKET = "clinical-photos";
-
-/*const { SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, PORT } =
-  process.env;
-
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
-  throw new Error(
-    "Missing env vars. Check SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY"
-  );
-}*/
-
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
-
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
-);
-
-const supabaseAuth = createClient(
-  SUPABASE_URL,
-  SUPABASE_ANON_KEY
-);
-
-/*const supabaseAdmin = createClient(
-  SUPABASE_URL,
-  SUPABASE_SERVICE_ROLE_KEY
-);
-*/
-
-function getBearerToken(req) {
-  const auth = req.headers.authorization || "";
-  return auth.startsWith("Bearer ") ? auth.slice(7) : null;
-}
-
-
 app.get("/health", (_, res) => res.json({ ok: true }));
 
 app.post("/api/queue/join", requireAuth, async (req, res) => {
-  const { cameraId } = req.body;
+  try {
+    const { cameraId } = req.body;
 
-  if (!cameraId) {
-    return res.status(400).json({ error: "cameraId is required" });
+    if (!cameraId) {
+      return res.status(400).json({ error: "cameraId is required" });
+    }
+
+    const supabaseUser = getAuthedSupabase(req);
+
+    const { data, error } = await supabaseUser.rpc("queue_join", {
+      p_camera_id: cameraId,
+    });
+
+    if (error) {
+      console.error("QUEUE JOIN RPC ERROR:", error);
+      return res.status(400).json({ error: error.message });
+    }
+
+    return res.json({ queueEntryId: data });
+  } catch (err) {
+    console.error("QUEUE JOIN ERROR:", err);
+    return res.status(500).json({ error: "Erro interno ao entrar na fila." });
   }
-
-  const { data, error } = await supabaseAdmin.rpc("queue_join", {
-    p_camera_id: cameraId,
-  });
-
-  if (error) {
-    return res.status(400).json({ error: error.message });
-  }
-
-  return res.json({ queueEntryId: data });
 });
 
 app.post("/api/queue/cancel", requireAuth, async (req, res) => {
-  const { cameraId } = req.body;
+  try {
+    const { cameraId } = req.body;
 
-  if (!cameraId) {
-    return res.status(400).json({ error: "cameraId is required" });
+    if (!cameraId) {
+      return res.status(400).json({ error: "cameraId is required" });
+    }
+
+    const supabaseUser = getAuthedSupabase(req);
+
+    const { data, error } = await supabaseUser.rpc("queue_cancel", {
+      p_camera_id: cameraId,
+    });
+
+    if (error) {
+      console.error("QUEUE CANCEL RPC ERROR:", error);
+      return res.status(400).json({ error: error.message });
+    }
+
+    return res.json({ cancelled: data });
+  } catch (err) {
+    console.error("QUEUE CANCEL ERROR:", err);
+    return res.status(500).json({ error: "Erro interno ao cancelar fila." });
   }
-
-  const { data, error } = await supabaseAdmin.rpc("queue_cancel", {
-    p_camera_id: cameraId,
-  });
-
-  if (error) {
-    return res.status(400).json({ error: error.message });
-  }
-
-  return res.json({ cancelled: data });
 });
 
 app.post("/api/queue/expire-turn", requireAuth, async (req, res) => {
-  const { cameraId } = req.body;
+  try {
+    const { cameraId } = req.body;
 
-  if (!cameraId) {
-    return res.status(400).json({ error: "cameraId is required" });
+    if (!cameraId) {
+      return res.status(400).json({ error: "cameraId is required" });
+    }
+
+    const supabaseUser = getAuthedSupabase(req);
+
+    const { data, error } = await supabaseUser.rpc("auto_expire_turn", {
+      p_camera_id: cameraId,
+    });
+
+    if (error) {
+      console.error("EXPIRE TURN RPC ERROR:", error);
+      return res.status(400).json({ error: error.message });
+    }
+
+    return res.json({ expired: data });
+  } catch (err) {
+    console.error("EXPIRE TURN ERROR:", err);
+    return res.status(500).json({ error: "Erro interno ao expirar turno." });
   }
-
-  const { data, error } = await supabaseAdmin.rpc("auto_expire_turn", {
-    p_camera_id: cameraId,
-  });
-
-  if (error) {
-    return res.status(400).json({ error: error.message });
-  }
-
-  return res.json({ expired: data });
 });
 
 app.post("/api/queue/sync", requireAuth, async (req, res) => {
-  const { cameraId } = req.body;
+  try {
+    const { cameraId } = req.body;
 
-  if (!cameraId) {
-    return res.status(400).json({ error: "cameraId is required" });
+    if (!cameraId) {
+      return res.status(400).json({ error: "cameraId is required" });
+    }
+
+    const supabaseUser = getAuthedSupabase(req);
+
+    const { data, error } = await supabaseUser.rpc("sync_queue_state", {
+      p_camera_id: cameraId,
+    });
+
+    if (error) {
+      console.error("SYNC QUEUE RPC ERROR:", error);
+      return res.status(400).json({ error: error.message });
+    }
+
+    return res.json({ result: data });
+  } catch (err) {
+    console.error("SYNC QUEUE ERROR:", err);
+    return res.status(500).json({ error: "Erro interno ao sincronizar fila." });
   }
-
-  const { data, error } = await supabaseAdmin.rpc("sync_queue_state", {
-    p_camera_id: cameraId,
-  });
-
-  if (error) {
-    return res.status(400).json({ error: error.message });
-  }
-
-  return res.json({ result: data });
 });
 
 app.post("/api/session/start", requireAuth, async (req, res) => {
@@ -231,7 +248,7 @@ app.post("/api/session/start", requireAuth, async (req, res) => {
         camera_id: cameraId,
         user_id: userId,
         patient_code: patientCode,
-        box: box,
+        box,
         status: "open",
         started_at: new Date().toISOString(),
       })
@@ -308,11 +325,14 @@ app.post("/api/session/pause", requireAuth, async (req, res) => {
       return res.status(400).json({ error: "cameraId is required" });
     }
 
-    const { data, error } = await supabaseAdmin.rpc("pause_session", {
+    const supabaseUser = getAuthedSupabase(req);
+
+    const { data, error } = await supabaseUser.rpc("pause_session", {
       p_camera_id: cameraId,
     });
 
     if (error) {
+      console.error("PAUSE SESSION RPC ERROR:", error);
       return res.status(400).json({ error: error.message });
     }
 
@@ -326,157 +346,167 @@ app.post("/api/session/pause", requireAuth, async (req, res) => {
 });
 
 app.post("/api/session/resume", requireAuth, async (req, res) => {
-  const { cameraId, sessionId } = req.body;
-  const userId = req.user.id;
+  try {
+    const { cameraId, sessionId } = req.body;
+    const userId = req.user.id;
 
-  if (!cameraId || !sessionId) {
-    return res.status(400).json({ error: "cameraId and sessionId are required" });
-  }
+    if (!cameraId || !sessionId) {
+      return res
+        .status(400)
+        .json({ error: "cameraId and sessionId are required" });
+    }
 
-  // 1) buscar sessão
-  const { data: sessionData, error: sessionError } = await supabaseAdmin
-    .from("clinical_sessions")
-    .select("*")
-    .eq("id", sessionId)
-    .single();
+    const { data: sessionData, error: sessionError } = await supabaseAdmin
+      .from("clinical_sessions")
+      .select("*")
+      .eq("id", sessionId)
+      .single();
 
-  if (sessionError || !sessionData) {
-    return res.status(404).json({ error: "Sessão não encontrada." });
-  }
+    if (sessionError || !sessionData) {
+      return res.status(404).json({ error: "Sessão não encontrada." });
+    }
 
-  if (sessionData.user_id !== userId) {
-    return res.status(403).json({ error: "Não tens permissão para retomar esta sessão." });
-  }
+    if (sessionData.user_id !== userId) {
+      return res
+        .status(403)
+        .json({ error: "Não tens permissão para retomar esta sessão." });
+    }
 
-  if (sessionData.status !== "paused") {
-    return res.status(400).json({ error: "A sessão não está pausada." });
-  }
+    if (sessionData.status !== "paused") {
+      return res.status(400).json({ error: "A sessão não está pausada." });
+    }
 
-  // 2) verificar estado atual da câmara
-  const { data: cameraState, error: cameraError } = await supabaseAdmin
-    .from("camera_state")
-    .select("*")
-    .eq("camera_id", cameraId)
-    .single();
+    const { data: cameraState, error: cameraError } = await supabaseAdmin
+      .from("camera_state")
+      .select("*")
+      .eq("camera_id", cameraId)
+      .single();
 
-  if (cameraError || !cameraState) {
-    return res.status(404).json({ error: "Estado da câmara não encontrado." });
-  }
+    if (cameraError || !cameraState) {
+      return res
+        .status(404)
+        .json({ error: "Estado da câmara não encontrado." });
+    }
 
-  // permitir retomar apenas se a câmara estiver reservada para este user
-  if (
-    cameraState.status !== "reserved" ||
-    cameraState.current_user_id !== userId
-  ) {
-    return res.status(400).json({
-      error: "A câmara não está reservada para este utilizador.",
+    if (
+      cameraState.status !== "reserved" ||
+      cameraState.current_user_id !== userId
+    ) {
+      return res.status(400).json({
+        error: "A câmara não está reservada para este utilizador.",
+      });
+    }
+
+    const { error: resumeSessionError } = await supabaseAdmin
+      .from("clinical_sessions")
+      .update({
+        status: "open",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", sessionId);
+
+    if (resumeSessionError) {
+      return res.status(400).json({ error: resumeSessionError.message });
+    }
+
+    const { error: updateCameraError } = await supabaseAdmin
+      .from("camera_state")
+      .update({
+        status: "in_use",
+        current_user_id: userId,
+        current_session_id: sessionId,
+        current_box: sessionData.box || null,
+        current_session_started_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("camera_id", cameraId);
+
+    if (updateCameraError) {
+      return res.status(400).json({ error: updateCameraError.message });
+    }
+
+    await supabaseAdmin
+      .from("queue_entries")
+      .update({
+        status: "served",
+        served_at: new Date().toISOString(),
+      })
+      .eq("camera_id", cameraId)
+      .eq("user_id", userId)
+      .eq("status", "notified");
+
+    return res.json({
+      resumed: true,
+      sessionId,
     });
+  } catch (err) {
+    console.error("RESUME SESSION ERROR:", err);
+    return res.status(500).json({ error: "Erro ao retomar sessão." });
   }
-
-  // 3) reabrir a sessão pausada
-  const { error: resumeSessionError } = await supabaseAdmin
-    .from("clinical_sessions")
-    .update({
-      status: "open",
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", sessionId);
-
-  if (resumeSessionError) {
-    return res.status(400).json({ error: resumeSessionError.message });
-  }
-
-  // 4) atualizar a câmara para in_use
-  const { error: updateCameraError } = await supabaseAdmin
-    .from("camera_state")
-    .update({
-      status: "in_use",
-      current_user_id: userId,
-      current_session_id: sessionId,
-      current_box: sessionData.box || null,
-      current_session_started_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq("camera_id", cameraId);
-
-  if (updateCameraError) {
-    return res.status(400).json({ error: updateCameraError.message });
-  }
-
-  // 5) retirar notified da fila, se existir
-  await supabaseAdmin
-    .from("queue_entries")
-    .update({
-      status: "served",
-      served_at: new Date().toISOString(),
-    })
-    .eq("camera_id", cameraId)
-    .eq("user_id", userId)
-    .eq("status", "notified");
-
-  return res.json({
-    resumed: true,
-    sessionId,
-  });
 });
 
-
 app.post("/api/session/stop", requireAuth, async (req, res) => {
-  const { cameraId } = req.body;
+  try {
+    const { cameraId } = req.body;
 
-  if (!cameraId) {
-    return res.status(400).json({ error: "cameraId is required" });
-  }
+    if (!cameraId) {
+      return res.status(400).json({ error: "cameraId is required" });
+    }
 
-  // 🔹 1. buscar estado da câmara
-  const { data: cameraState, error: cameraError } = await supabaseAdmin
-    .from("camera_state")
-    .select("*")
-    .eq("camera_id", cameraId)
-    .single();
+    const { data: cameraState, error: cameraError } = await supabaseAdmin
+      .from("camera_state")
+      .select("*")
+      .eq("camera_id", cameraId)
+      .single();
 
-  if (cameraError || !cameraState) {
-    return res.status(404).json({ error: "Estado da câmara não encontrado." });
-  }
+    if (cameraError || !cameraState) {
+      return res
+        .status(404)
+        .json({ error: "Estado da câmara não encontrado." });
+    }
 
-  const currentSessionId = cameraState.current_session_id;
+    const currentSessionId = cameraState.current_session_id;
 
-  // 🔹 2. validar fotos
-  const { data: sessionPhotos, error: photosError } = await supabaseAdmin
-    .from("session_photos")
-    .select("id")
-    .eq("session_id", currentSessionId);
+    const { data: sessionPhotos, error: photosError } = await supabaseAdmin
+      .from("session_photos")
+      .select("id")
+      .eq("session_id", currentSessionId);
 
-  if (photosError) {
-    return res.status(400).json({ error: photosError.message });
-  }
+    if (photosError) {
+      return res.status(400).json({ error: photosError.message });
+    }
 
-  if (!sessionPhotos || sessionPhotos.length === 0) {
-    return res.status(400).json({
-      error: "Não é possível concluir a sessão sem fotografias associadas.",
+    if (!sessionPhotos || sessionPhotos.length === 0) {
+      return res.status(400).json({
+        error: "Não é possível concluir a sessão sem fotografias associadas.",
+      });
+    }
+
+    const supabaseUser = getAuthedSupabase(req);
+
+    const { data, error } = await supabaseUser.rpc("stop_session", {
+      p_camera_id: cameraId,
     });
+
+    if (error) {
+      console.error("STOP SESSION RPC ERROR:", error);
+      return res.status(400).json({ error: error.message });
+    }
+
+    return res.json({ stopped: data });
+  } catch (err) {
+    console.error("STOP SESSION ERROR:", err);
+    return res.status(500).json({ error: "Erro ao concluir sessão." });
   }
-
-  // 🔹 3. concluir sessão
-  const { data, error } = await supabaseAdmin.rpc("stop_session", {
-    p_camera_id: cameraId,
-  });
-
-  if (error) {
-    return res.status(400).json({ error: error.message });
-  }
-
-  return res.json({ stopped: data });
 });
 
 console.log("✅ Rota /api/photos/ingest carregada");
 
 app.post(
   "/api/photos/ingest",
-  //requireAuth,
   upload.single("photo"),
   async (req, res) => {
-    console.log("🔥 REQUEST RECEBIDO EM /api/photos/ingest"); 
+    console.log("🔥 REQUEST RECEBIDO EM /api/photos/ingest");
     try {
       const { cameraId, phase = "during" } = req.body;
       const file = req.file;
@@ -496,7 +526,9 @@ app.post(
         .single();
 
       if (cameraError || !cameraState) {
-        return res.status(404).json({ error: "Estado da câmara não encontrado." });
+        return res
+          .status(404)
+          .json({ error: "Estado da câmara não encontrado." });
       }
 
       if (
@@ -535,17 +567,17 @@ app.post(
       }
 
       const { data: photoRow, error: insertError } = await supabaseAdmin
-  .from("session_photos")
-  .insert({
-    session_id: sessionId,
-    camera_id: cameraId,
-    user_id: userId,
-    phase: safePhase,
-    storage_path: storagePath,
-    captured_at: new Date().toISOString(),
-  })
-  .select()
-  .single();
+        .from("session_photos")
+        .insert({
+          session_id: sessionId,
+          camera_id: cameraId,
+          user_id: userId,
+          phase: safePhase,
+          storage_path: storagePath,
+          captured_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
 
       if (insertError) {
         return res.status(400).json({ error: insertError.message });
@@ -559,7 +591,9 @@ app.post(
       });
     } catch (error) {
       console.error("PHOTO INGEST ERROR:", error);
-      return res.status(500).json({ error: "Erro interno ao ingerir fotografia." });
+      return res
+        .status(500)
+        .json({ error: "Erro interno ao ingerir fotografia." });
     }
   }
 );
@@ -603,7 +637,6 @@ app.get("/api/camera/active-session", async (req, res) => {
       return res.status(400).json({ error: "cameraId is required" });
     }
 
-    // 1. buscar estado da câmara
     const { data: cameraState, error: cameraError } = await supabaseAdmin
       .from("camera_state")
       .select("*")
@@ -614,17 +647,12 @@ app.get("/api/camera/active-session", async (req, res) => {
       return res.status(404).json({ error: "Câmara não encontrada." });
     }
 
-    // 2. verificar se há sessão ativa
-    if (
-      cameraState.status !== "in_use" ||
-      !cameraState.current_session_id
-    ) {
+    if (cameraState.status !== "in_use" || !cameraState.current_session_id) {
       return res.json({
         hasActiveSession: false,
       });
     }
 
-    // 3. buscar sessão
     const { data: sessionData, error: sessionError } = await supabaseAdmin
       .from("clinical_sessions")
       .select("*")
@@ -635,7 +663,6 @@ app.get("/api/camera/active-session", async (req, res) => {
       return res.status(404).json({ error: "Sessão não encontrada." });
     }
 
-    // 4. devolver info completa
     return res.json({
       hasActiveSession: true,
       sessionId: sessionData.id,
@@ -667,7 +694,6 @@ app.get("/api/teachers", requireAuth, async (req, res) => {
     return res.status(500).json({ error: "Erro ao obter professores." });
   }
 });
-
 
 app.post("/api/session/assign-teacher", requireAuth, async (req, res) => {
   try {
@@ -718,15 +744,18 @@ app.get("/api/session/:sessionId/teachers", requireAuth, async (req, res) => {
       return res.status(400).json({ error: error.message });
     }
 
-    const teacherIds = [...new Set((data || []).map((row) => row.teacher_user_id))];
+    const teacherIds = [
+      ...new Set((data || []).map((row) => row.teacher_user_id)),
+    ];
 
     let teachersMap = {};
 
     if (teacherIds.length > 0) {
-      const { data: teacherProfiles, error: teacherProfilesError } = await supabaseAdmin
-        .from("profiles")
-        .select("id, full_name, role")
-        .in("id", teacherIds);
+      const { data: teacherProfiles, error: teacherProfilesError } =
+        await supabaseAdmin
+          .from("profiles")
+          .select("id, full_name, role")
+          .in("id", teacherIds);
 
       if (teacherProfilesError) {
         return res.status(400).json({ error: teacherProfilesError.message });
