@@ -5,6 +5,13 @@ import { createClient } from "@supabase/supabase-js";
 import multer from "multer";
 
 import jwt from "jsonwebtoken";
+
+import { createClient } from "@supabase/supabase-js";
+
+const supabaseAdmin = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 //const jwt = require("jsonwebtoken");
 
 async function requireAuth(req, res, next) {
@@ -71,10 +78,11 @@ const supabaseAuth = createClient(
   SUPABASE_ANON_KEY
 );
 
-const supabaseAdmin = createClient(
+/*const supabaseAdmin = createClient(
   SUPABASE_URL,
   SUPABASE_SERVICE_ROLE_KEY
 );
+*/
 
 function getBearerToken(req) {
   const auth = req.headers.authorization || "";
@@ -91,7 +99,7 @@ app.post("/api/queue/join", requireAuth, async (req, res) => {
     return res.status(400).json({ error: "cameraId is required" });
   }
 
-  const { data, error } = await req.supabaseAdmin.rpc("queue_join", {
+  const { data, error } = await supabaseAdmin.rpc("queue_join", {
     p_camera_id: cameraId,
   });
 
@@ -109,7 +117,7 @@ app.post("/api/queue/cancel", requireAuth, async (req, res) => {
     return res.status(400).json({ error: "cameraId is required" });
   }
 
-  const { data, error } = await req.supabaseAdmin.rpc("queue_cancel", {
+  const { data, error } = await supabaseAdmin.rpc("queue_cancel", {
     p_camera_id: cameraId,
   });
 
@@ -127,7 +135,7 @@ app.post("/api/queue/expire-turn", requireAuth, async (req, res) => {
     return res.status(400).json({ error: "cameraId is required" });
   }
 
-  const { data, error } = await req.supabaseAdmin.rpc("auto_expire_turn", {
+  const { data, error } = await supabaseAdmin.rpc("auto_expire_turn", {
     p_camera_id: cameraId,
   });
 
@@ -145,7 +153,7 @@ app.post("/api/queue/sync", requireAuth, async (req, res) => {
     return res.status(400).json({ error: "cameraId is required" });
   }
 
-  const { data, error } = await req.supabaseAdmin.rpc("sync_queue_state", {
+  const { data, error } = await supabaseAdmin.rpc("sync_queue_state", {
     p_camera_id: cameraId,
   });
 
@@ -450,7 +458,7 @@ app.post("/api/session/stop", requireAuth, async (req, res) => {
   }
 
   // 🔹 3. concluir sessão
-  const { data, error } = await req.supabaseAdmin.rpc("stop_session", {
+  const { data, error } = await supabaseAdmin.rpc("stop_session", {
     p_camera_id: cameraId,
   });
 
