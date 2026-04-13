@@ -6,7 +6,7 @@ import multer from "multer";
 
 import jwt from "jsonwebtoken";
 
-import { createClient } from "@supabase/supabase-js";
+//import { createClient } from "@supabase/supabase-js";
 
 const supabaseAdmin = createClient(
   process.env.SUPABASE_URL,
