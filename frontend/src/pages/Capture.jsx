@@ -84,19 +84,13 @@ const API_BASE_URL = import.meta.env.VITE_API_URL;
   const currentUserId = session?.user?.id;
 
 
-  useEffect(() => {
-  async function setupRealtimeAuth() {
-    const {
-      data: { session: activeSession },
-    } = await supabase.auth.getSession();
+useEffect(() => {
+  if (!session?.access_token) return;
 
-    if (activeSession?.access_token) {
-      await supabase.realtime.setAuth(activeSession.access_token);
-    }
-  }
+  console.log("🔐 A configurar realtime auth");
 
-  setupRealtimeAuth();
-}, []);
+  supabase.realtime.setAuth(session.access_token);
+}, [session?.access_token]);
 
 
   const loadData = useCallback(async () => {
@@ -711,6 +705,7 @@ useEffect(() => {
   };
 }, [session?.access_token, CAMERA_ID, loadData]);
 
+
 useEffect(() => {
   if (!session?.access_token || !CAMERA_ID) return;
 
@@ -724,8 +719,12 @@ useEffect(() => {
   if (!shouldPoll) return;
 
   const interval = setInterval(async () => {
-    await syncQueueState();
-    await loadData();
+    try {
+      await syncQueueState();
+      await loadData();
+    } catch (error) {
+      console.error("Polling error:", error);
+    }
   }, 10000);
 
   return () => clearInterval(interval);

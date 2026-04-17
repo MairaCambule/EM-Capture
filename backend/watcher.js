@@ -9,19 +9,25 @@ const PROCESSED_FOLDER = "Z:/EM Capture/processed";
 const ERROR_FOLDER = "Z:/EM Capture/error";
 
 const API_URL = "https://em-capture-backend.onrender.com/api/photos/ingest";
-const ACTIVE_SESSION_URL = "https://em-capture-backend.onrender.com/api/camera/active-session";
+const ACTIVE_SESSION_URL =
+  "https://em-capture-backend.onrender.com/api/camera/active-session";
 
-// coloca aqui o camera_id real que usas no sistema
+// camera_id real
 const CAMERA_ID = "00000000-0000-0000-0000-000000000001";
 
-// coloca aqui o token, se o endpoint ainda estiver protegido
-const TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFoc3ZsaXlsd294aHJheWl4a3BvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MjY1ODIwOCwiZXhwIjoyMDg4MjM0MjA4fQ.8Y27mr0nKlBeBbKWydIe_R2Np-YFkXkJS7ZF-huI4qY";
+// Se /api/photos/ingest NÃO estiver protegido, deixa vazio:
+const TOKEN = "";
 
 console.log("WATCH_FOLDER =", WATCH_FOLDER);
 console.log("EXISTE PASTA?", fs.existsSync(WATCH_FOLDER));
 
 async function moveFile(sourcePath, targetFolder) {
   try {
+    if (!fs.existsSync(sourcePath)) {
+      console.log("⚠️ Ficheiro já não existe, não foi movido:", sourcePath);
+      return;
+    }
+
     const fileName = path.basename(sourcePath);
     const targetPath = path.join(targetFolder, fileName);
 
@@ -37,28 +43,39 @@ async function moveFile(sourcePath, targetFolder) {
 }
 
 async function getActiveSessionInfo() {
-  const response = await axios.get(ACTIVE_SESSION_URL, {
-    params: {
-      cameraId: CAMERA_ID,
-    },
-    headers: TOKEN
-      ? {
-          Authorization: `Bearer ${TOKEN}`,
-        }
-      : {},
-  });
+  try {
+    console.log("🔍 A chamar active-session API...");
 
-  return response.data;
+    const response = await axios.get(ACTIVE_SESSION_URL, {
+      params: {
+        cameraId: CAMERA_ID,
+      },
+    });
+
+    console.log("✅ Resposta active-session:", response.data);
+
+    return response.data;
+  } catch (err) {
+    console.error("❌ ERRO active-session:");
+    console.error(err.message);
+    console.error(err.response?.status);
+    console.error(err.response?.data);
+    throw err;
+  }
 }
 
 async function handleNewFile(filePath) {
   try {
     console.log("📸 Nova foto detectada:", filePath);
 
-    const fileBuffer = fs.readFileSync(filePath);
+    if (!fs.existsSync(filePath)) {
+      console.log("⚠️ O ficheiro já não existe no momento da leitura.");
+      return;
+    }
 
+    console.log("➡️ A pedir sessão ativa...");
     const sessionInfo = await getActiveSessionInfo();
-    console.log("Sessão ativa:", sessionInfo);
+    console.log("✅ Sessão ativa recebida:", sessionInfo);
 
     if (!sessionInfo?.hasActiveSession) {
       console.log("⏸ Sem sessão ativa. Foto ignorada.");
@@ -67,22 +84,29 @@ async function handleNewFile(filePath) {
     }
 
     const phase = sessionInfo.currentPhase || "during";
-    console.log("Fase enviada para upload:", phase);
+    console.log("📌 Fase:", phase);
+
+    const fileBuffer = fs.readFileSync(filePath);
+
+    const ext = path.extname(filePath).toLowerCase();
+    let contentType = "application/octet-stream";
+    if (ext === ".png") contentType = "image/png";
+    if (ext === ".jpg" || ext === ".jpeg") contentType = "image/jpeg";
 
     const formData = new FormData();
-    formData.append("photo", fileBuffer, path.basename(filePath));
+    formData.append("photo", fileBuffer, {
+      filename: path.basename(filePath),
+      contentType,
+    });
     formData.append("cameraId", CAMERA_ID);
     formData.append("phase", phase);
+
+    console.log("📡 A enviar foto para API...");
+    console.log("API_URL:", API_URL);
 
     const response = await axios.post(API_URL, formData, {
       headers: {
         ...formData.getHeaders(),
-        ...(TOKEN
-          ? {
-               Authorization: `Bearer ${TOKEN}`,
-
-            }
-          : {}),
       },
       maxBodyLength: Infinity,
     });
@@ -90,13 +114,13 @@ async function handleNewFile(filePath) {
     console.log("✅ Upload feito:", response.data);
 
     await moveFile(filePath, PROCESSED_FOLDER);
-  } catch (error) {
-    console.error("❌ Erro ao enviar foto:", error.message);
-
-    if (error.response) {
-      console.error("Status:", error.response.status);
-      console.error("Resposta:", error.response.data);
-    }
+  } catch (err) {
+    console.error("❌ ERRO COMPLETO:");
+    console.error(err);
+    console.error("❌ Message:", err.message);
+    console.error("❌ Code:", err.code);
+    console.error("❌ Status:", err.response?.status);
+    console.error("❌ Data:", err.response?.data);
 
     await moveFile(filePath, ERROR_FOLDER);
   }
@@ -132,16 +156,3 @@ watcher.on("error", (error) => {
 watcher.on("ready", () => {
   console.log("✅ Watcher pronto.");
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
