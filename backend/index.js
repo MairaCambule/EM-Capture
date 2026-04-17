@@ -778,6 +778,152 @@ app.get("/api/session/:sessionId/teachers", requireAuth, async (req, res) => {
   }
 });
 
+app.post("/api/session/archive", requireAuth, async (req, res) => {
+  try {
+    const { sessionId } = req.body;
+    const userId = req.user.id;
+
+    if (!sessionId) {
+      return res.status(400).json({ error: "sessionId is required" });
+    }
+
+    const { data: sessionData, error: sessionError } = await supabaseAdmin
+      .from("clinical_sessions")
+      .select("id, user_id, is_archived")
+      .eq("id", sessionId)
+      .single();
+
+    if (sessionError || !sessionData) {
+      return res.status(404).json({ error: "Registo não encontrado." });
+    }
+
+    const { data: profileData, error: profileError } = await supabaseAdmin
+      .from("profiles")
+      .select("role")
+      .eq("id", userId)
+      .single();
+
+    if (profileError) {
+      return res.status(400).json({ error: profileError.message });
+    }
+
+    const isGlobalAdmin = profileData?.role === "global_admin";
+
+    if (!isGlobalAdmin && sessionData.user_id !== userId) {
+      return res.status(403).json({ error: "Sem permissão para arquivar este registo." });
+    }
+
+    const { error: archiveError } = await supabaseAdmin
+      .from("clinical_sessions")
+      .update({
+        is_archived: true,
+        archived_at: new Date().toISOString(),
+        archived_by_user_id: userId,
+      })
+      .eq("id", sessionId);
+
+    if (archiveError) {
+      return res.status(400).json({ error: archiveError.message });
+    }
+
+    return res.json({ archived: true });
+  } catch (err) {
+    console.error("ARCHIVE SESSION ERROR:", err);
+    return res.status(500).json({ error: "Erro ao arquivar registo." });
+  }
+});
+
+app.post("/api/session/restore", requireAuth, async (req, res) => {
+  try {
+    const { sessionId } = req.body;
+    const userId = req.user.id;
+
+    if (!sessionId) {
+      return res.status(400).json({ error: "sessionId is required" });
+    }
+
+    const { data: profileData, error: profileError } = await supabaseAdmin
+      .from("profiles")
+      .select("role")
+      .eq("id", userId)
+      .single();
+
+    if (profileError) {
+      return res.status(400).json({ error: profileError.message });
+    }
+
+    if (profileData?.role !== "global_admin") {
+      return res.status(403).json({ error: "Só admins podem restaurar registos." });
+    }
+
+    const { error: restoreError } = await supabaseAdmin
+      .from("clinical_sessions")
+      .update({
+        is_archived: false,
+        archived_at: null,
+        archived_by_user_id: null,
+      })
+      .eq("id", sessionId);
+
+    if (restoreError) {
+      return res.status(400).json({ error: restoreError.message });
+    }
+
+    return res.json({ restored: true });
+  } catch (err) {
+    console.error("RESTORE SESSION ERROR:", err);
+    return res.status(500).json({ error: "Erro ao restaurar registo." });
+  }
+});
+
+app.post("/api/session/delete-permanently", requireAuth, async (req, res) => {
+  try {
+    const { sessionId } = req.body;
+    const userId = req.user.id;
+
+    if (!sessionId) {
+      return res.status(400).json({ error: "sessionId is required" });
+    }
+
+    const { data: profileData, error: profileError } = await supabaseAdmin
+      .from("profiles")
+      .select("role")
+      .eq("id", userId)
+      .single();
+
+    if (profileError) {
+      return res.status(400).json({ error: profileError.message });
+    }
+
+    if (profileData?.role !== "global_admin") {
+      return res.status(403).json({ error: "Só admins podem eliminar definitivamente." });
+    }
+
+    const { error: deletePhotosError } = await supabaseAdmin
+      .from("session_photos")
+      .delete()
+      .eq("session_id", sessionId);
+
+    if (deletePhotosError) {
+      return res.status(400).json({ error: deletePhotosError.message });
+    }
+
+    const { error: deleteSessionError } = await supabaseAdmin
+      .from("clinical_sessions")
+      .delete()
+      .eq("id", sessionId);
+
+    if (deleteSessionError) {
+      return res.status(400).json({ error: deleteSessionError.message });
+    }
+
+    return res.json({ deleted: true });
+  } catch (err) {
+    console.error("DELETE SESSION ERROR:", err);
+    return res.status(500).json({ error: "Erro ao eliminar registo definitivamente." });
+  }
+});
+
 const listenPort = process.env.PORT || 3001;
 app.listen(listenPort, () => {
   console.log(`API running on http://localhost:${listenPort}`);
