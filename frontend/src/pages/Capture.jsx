@@ -1952,6 +1952,15 @@ async function deleteRecordPermanently(sessionId) {
                         🔍
                       </button>
                     </td>
+                    {!record.is_archived && (
+  <button
+    className="secondary-btn"
+    onClick={() => archiveRecord(record.id)}
+    type="button"
+  >
+    Arquivar
+  </button>
+)}
                   </tr>
                 ))}
               </tbody>
