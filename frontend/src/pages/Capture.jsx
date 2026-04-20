@@ -1067,6 +1067,75 @@ async function confirmStopSession() {
   setShowStopConfirmModal(false);
   await stopSession();
 }
+async function archiveRecord(sessionId) {
+  try {
+    const data = await apiPost("/api/session/archive", { sessionId });
+
+    if (data.archived) {
+      setMsg({
+        text: "Registo arquivado com sucesso.",
+        type: "success",
+      });
+
+      await loadData();
+      if (selectedRecord?.id === sessionId) {
+        closeRecordModal();
+      }
+    }
+  } catch (error) {
+    console.error("ARCHIVE RECORD ERROR:", error);
+    setMsg({
+      text: error.message,
+      type: "warning",
+    });
+  }
+}
+
+async function restoreRecord(sessionId) {
+  try {
+    const data = await apiPost("/api/session/restore", { sessionId });
+
+    if (data.restored) {
+      setMsg({
+        text: "Registo restaurado com sucesso.",
+        type: "success",
+      });
+
+      await loadData();
+    }
+  } catch (error) {
+    console.error("RESTORE RECORD ERROR:", error);
+    setMsg({
+      text: error.message,
+      type: "warning",
+    });
+  }
+}
+
+async function deleteRecordPermanently(sessionId) {
+  try {
+    const data = await apiPost("/api/session/delete-permanently", { sessionId });
+
+    if (data.deleted) {
+      setMsg({
+        text: "Registo eliminado definitivamente.",
+        type: "success",
+      });
+
+      await loadData();
+      if (selectedRecord?.id === sessionId) {
+        closeRecordModal();
+      }
+    }
+  } catch (error) {
+    console.error("DELETE RECORD ERROR:", error);
+    setMsg({
+      text: error.message,
+      type: "warning",
+    });
+  }
+}
+
 
 
   function closeRecordModal() {
@@ -1141,6 +1210,7 @@ async function confirmStopSession() {
         <h2 style={{ marginTop: 0, color: "#1e4a8d", fontSize: "1.7rem" }}>
           Ações
         </h2>
+        
 
         <p style={{ color: "#5f6b7a", marginTop: 8 }}>
           Gestão da fila e controlo do ciclo da sessão.
@@ -1858,6 +1928,7 @@ async function confirmStopSession() {
                   <th>Estado</th>
                   <th>Nº fotos</th>
                   <th>Consultar</th>
+                  <th>Ações</th>
                 </tr>
               </thead>
               <tbody>
