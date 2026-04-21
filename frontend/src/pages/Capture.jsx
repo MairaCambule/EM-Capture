@@ -1515,14 +1515,14 @@ async function deleteRecordPermanently(sessionId) {
               <div style={{ padding: 18, borderRadius: 18, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
                 <div style={{ color: "#7f8b99", marginBottom: 8 }}>Box atual</div>
                 <div style={{ fontWeight: 700, color: "#17324d" }}>
-                  {cameraState?.current_box || "—"}
+                  <p>{cameraState?.status === "available" ? "—" : cameraState?.current_box || "—"}</p>
                 </div>
               </div>
 
               <div style={{ padding: 18, borderRadius: 18, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
                 <div style={{ color: "#7f8b99", marginBottom: 8 }}>Sessão atual</div>
                 <div style={{ fontWeight: 700, color: "#17324d", wordBreak: "break-word" }}>
-                  {cameraState?.current_session_id || "—"}
+                  <p>{cameraState?.status === "available" ? "—" : currentSession?.id || "—"}</p>
                 </div>
               </div>
 
