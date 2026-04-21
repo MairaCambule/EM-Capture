@@ -1756,7 +1756,11 @@ async function confirmStopSession() {
                 border: "1px solid #e4e9f0",
               }}
             >
-              <div style={{ fontWeight: 700, color: "#1e4a8d", marginBottom: 8 }}>
+            
+            </div>
+          </div>
+
+          <div style={{ fontWeight: 700, color: "#1e4a8d", marginBottom: 8 }}>
                 Carregar fotografias
               </div>
               <div style={{ display: "grid", gap: 12 }}>
@@ -1780,8 +1784,6 @@ async function confirmStopSession() {
                   {uploadingPhoto ? "A carregar..." : "Carregar fotografia"}
                 </button>
               </div>
-            </div>
-          </div>
         </div>
       </section>
 
