@@ -119,7 +119,9 @@ export default function Capture({ session }) {
   const canStartSessionFinal = canStartSession && hasRequiredSessionData;
 
   const canSeeSessionClinic =
-  isCurrentUserUsingCamera || isCurrentUserReserved;
+    isCurrentUserUsingCamera || isCurrentUserReserved;
+
+  const [isPreparingSession, setIsPreparingSession] = useState(false);
 
 
   useEffect(() => {
@@ -225,18 +227,27 @@ export default function Capture({ session }) {
         if (error) {
           console.error("Erro ao buscar sessão:", error);
           setCurrentSession(null);
-          setBox("");
-          setPatientCode("");
+
+          if (!isPreparingSession) {
+            setBox("");
+            setPatientCode("");
+          }
         } else {
           setCurrentSession(data || null);
           setBox(data?.box || "");
           setPatientCode(data?.patient_code || "");
+          setIsPreparingSession(false);
         }
       } else {
         setCurrentSession(null);
-        setBox("");
-        setPatientCode("");
+
+        // Só limpa automaticamente se NÃO estiveres a preparar nova sessão
+        if (!isPreparingSession) {
+          setBox("");
+          setPatientCode("");
+        }
       }
+
 
       // Buscar todos os user_id possíveis para montar o mapa de nomes
       const { data: allSessionsForNames, error: allSessionsForNamesError } =
@@ -764,21 +775,29 @@ export default function Capture({ session }) {
   }, [session?.access_token, CAMERA_ID, loadData]);
 
 
-useEffect(() => {
-  if (!session?.access_token || !CAMERA_ID) return;
+  useEffect(() => {
+    if (!session?.access_token || !CAMERA_ID) return;
 
-  const interval = setInterval(async () => {
-    try {
-      await syncQueueState();
-      await loadData();
-    } catch (error) {
-      console.error("Polling error:", error);
-    }
-  }, 5000);
+    // enquanto o user está a preparar a sessão, não refrescar agressivamente
+    if (isCurrentUserReserved && isPreparingSession) return;
 
-  return () => clearInterval(interval);
-}, [session?.access_token, CAMERA_ID, loadData]);
+    const interval = setInterval(async () => {
+      try {
+        await syncQueueState();
+        await loadData();
+      } catch (error) {
+        console.error("Polling error:", error);
+      }
+    }, 5000);
 
+    return () => clearInterval(interval);
+  }, [
+    session?.access_token,
+    CAMERA_ID,
+    loadData,
+    isCurrentUserReserved,
+    isPreparingSession,
+  ]);
   useEffect(() => {
     async function handleExpiredTurn() {
       if (
@@ -821,11 +840,13 @@ useEffect(() => {
     if (isMyTurn && !isCurrentUserUsingCamera) {
       setShowTurnModal(true);
 
-      // 🔥 limpar campos para NOVA sessão
-      setBox("");
-      setPatientCode("");
+      if (!currentSession) {
+        setBox("");
+        setPatientCode("");
+        setIsPreparingSession(false);
+      }
     }
-  }, [isMyTurn, isCurrentUserUsingCamera]);
+  }, [isMyTurn, isCurrentUserUsingCamera, currentSession]);
 
   useEffect(() => {
     if (!isMyTurn) {
@@ -892,6 +913,7 @@ useEffect(() => {
           text: `Sessão iniciada com sucesso. ID: ${data.sessionId}`,
           type: "success",
         });
+        setIsPreparingSession(false);
 
         setPendingResumeRecord(null);
         setBox("");
@@ -1747,25 +1769,102 @@ useEffect(() => {
   </div>
   */}
         </div>
-{canSeeSessionClinic && (
-        <div
-          style={{
-            background: "#fff",
-            borderRadius: 24,
-            padding: 26,
-            border: "1px solid #e4e9f0",
-          }}
-        >
-          <h2 style={{ marginTop: 0, color: "#1e4a8d", fontSize: "1.7rem" }}>
-            Sessão clínica
-          </h2>
+        {canSeeSessionClinic && (
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 24,
+              padding: 26,
+              border: "1px solid #e4e9f0",
+            }}
+          >
+            <h2 style={{ marginTop: 0, color: "#1e4a8d", fontSize: "1.7rem" }}>
+              Sessão clínica
+            </h2>
 
-          <p style={{ color: "#5f6b7a", marginTop: 8 }}>
-            Preparação da sessão ativa e carregamento de fotografias.
-          </p>
+            <p style={{ color: "#5f6b7a", marginTop: 8 }}>
+              Preparação da sessão ativa e carregamento de fotografias.
+            </p>
 
-          <div style={{ display: "grid", gap: 16, marginTop: 22 }}>
-            <div>
+            <div style={{ display: "grid", gap: 16, marginTop: 22 }}>
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: 8,
+                    color: "#5f6b7a",
+                    fontWeight: 600,
+                  }}
+                >
+                  Box
+                </label>
+                <input
+                  value={box}
+                  onChange={(e) => {
+                    setIsPreparingSession(true);
+                    setBox(e.target.value);
+                  }}
+                  placeholder="Introduza a Box"
+                  disabled={!!currentSession && !isEditingSessionData}
+                />
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: 8,
+                    color: "#5f6b7a",
+                    fontWeight: 600,
+                  }}
+                >
+                  Código do paciente
+                </label>
+                <input
+                  autoFocus={!currentSession}
+                  value={patientCode}
+                  onChange={(e) => {
+                    setIsPreparingSession(true);
+                    setPatientCode(e.target.value);
+                  }}
+                  placeholder="Introduza o código"
+                  disabled={!!currentSession && !isEditingSessionData}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && canStartSessionFinal) {
+                      startSession();
+                    }
+                  }}
+                />
+              </div>
+            </div>
+
+            {canEditSessionData && (
+              <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
+                {!isEditingSessionData ? (
+                  <button type="button" onClick={() => setIsEditingSessionData(true)}>
+                    Editar
+                  </button>
+                ) : (
+                  <>
+                    <button type="button" onClick={saveSessionData}>
+                      Guardar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsEditingSessionData(false);
+                        setBox(currentSession?.box || "");
+                        setPatientCode(currentSession?.patient_code || "");
+                      }}
+                    >
+                      Cancelar
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+
+            <div style={{ marginTop: 26 }}>
               <label
                 style={{
                   display: "block",
@@ -1774,109 +1873,38 @@ useEffect(() => {
                   fontWeight: 600,
                 }}
               >
-                Box
+                Carregar fotografias
               </label>
-              <input
-                value={box}
-                onChange={(e) => setBox(e.target.value)}
-                placeholder="Introduza a Box"
-                disabled={!!currentSession && !isEditingSessionData}
-              />
-            </div>
 
-            <div>
-              <label
-                style={{
-                  display: "block",
-                  marginBottom: 8,
-                  color: "#5f6b7a",
-                  fontWeight: 600,
-                }}
+              <select
+                value={photoPhase}
+                onChange={(e) => setPhotoPhase(e.target.value)}
+                disabled={!currentSession || uploadingPhoto}
+                style={{ marginBottom: 12 }}
               >
-                Código do paciente
-              </label>
+                <option value="before">Inicial</option>
+                <option value="during">Durante</option>
+                <option value="after">Final</option>
+              </select>
+
               <input
-                autoFocus={!currentSession}
-                value={patientCode}
-                onChange={(e) => setPatientCode(e.target.value)}
-                placeholder="Introduza o código"
-                disabled={!!currentSession && !isEditingSessionData}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && canStartSessionFinal) {
-                    startSession();
-                  }
-                }}
+                type="file"
+                accept="image/*"
+                onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                disabled={!currentSession || uploadingPhoto}
+                style={{ marginBottom: 12 }}
               />
+
+              <button
+                type="button"
+                disabled={!currentSession || !selectedFile || uploadingPhoto}
+                onClick={uploadPhoto}
+              >
+                {uploadingPhoto ? "A carregar..." : "Carregar fotografia"}
+              </button>
             </div>
           </div>
-
-          {canEditSessionData && (
-            <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
-              {!isEditingSessionData ? (
-                <button type="button" onClick={() => setIsEditingSessionData(true)}>
-                  Editar
-                </button>
-              ) : (
-                <>
-                  <button type="button" onClick={saveSessionData}>
-                    Guardar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsEditingSessionData(false);
-                      setBox(currentSession?.box || "");
-                      setPatientCode(currentSession?.patient_code || "");
-                    }}
-                  >
-                    Cancelar
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-
-          <div style={{ marginTop: 26 }}>
-            <label
-              style={{
-                display: "block",
-                marginBottom: 8,
-                color: "#5f6b7a",
-                fontWeight: 600,
-              }}
-            >
-              Carregar fotografias
-            </label>
-
-            <select
-              value={photoPhase}
-              onChange={(e) => setPhotoPhase(e.target.value)}
-              disabled={!currentSession || uploadingPhoto}
-              style={{ marginBottom: 12 }}
-            >
-              <option value="before">Inicial</option>
-              <option value="during">Durante</option>
-              <option value="after">Final</option>
-            </select>
-
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
-              disabled={!currentSession || uploadingPhoto}
-              style={{ marginBottom: 12 }}
-            />
-
-            <button
-              type="button"
-              disabled={!currentSession || !selectedFile || uploadingPhoto}
-              onClick={uploadPhoto}
-            >
-              {uploadingPhoto ? "A carregar..." : "Carregar fotografia"}
-            </button>
-          </div>
-        </div>
-)}
+        )}
 
       </section>
 
