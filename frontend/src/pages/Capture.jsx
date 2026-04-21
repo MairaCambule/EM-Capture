@@ -169,33 +169,31 @@ useEffect(() => {
       setModuleRole(currentModuleRole);
     }
 
-   if (stateData?.status !== "in_use" && stateData?.status !== "reserved") {
+    const isActiveState =
+  stateData?.status === "in_use" ||
+  stateData?.status === "reserved" ||
+  stateData?.status === "paused"; // 👈 ADICIONA ISTO
+
+if (!isActiveState) {
   setCurrentSession(null);
   setBox("");
   setPatientCode("");
 } else if (stateData?.current_session_id) {
-  const { data: sessionsData, error } = await supabase
-  .from("clinical_sessions")
-  .select("*")
-  .eq("user_id", currentUserId)
-  .eq("is_archived", false) // 👈 ESTA LINHA
-  .order("started_at", { ascending: false });
-  
-  /*const { data: sessionData, error: sessionError } = await supabase
+  const { data, error } = await supabase
     .from("clinical_sessions")
     .select("*")
     .eq("id", stateData.current_session_id)
     .maybeSingle();
-*/
-  if (!sessionError) {
-    setCurrentSession(sessionData || null);
-  } else {
+
+  if (error) {
+    console.error("Erro ao buscar sessão:", error);
     setCurrentSession(null);
+  } else {
+    setCurrentSession(data || null);
   }
 } else {
   setCurrentSession(null);
 }
-
     // Buscar todos os user_id possíveis para montar o mapa de nomes
     const { data: allSessionsForNames, error: allSessionsForNamesError } =
       await supabase.from("clinical_sessions").select("user_id");
