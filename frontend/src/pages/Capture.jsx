@@ -39,6 +39,8 @@ const [currentPhase, setCurrentPhase] = useState("during");
 
 const [showStopConfirmModal, setShowStopConfirmModal] = useState(false);
 
+const [isEditingSessionData, setIsEditingSessionData] = useState(false);
+
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 //const BASE_URL = "https://em-capture-backend.onrender.com";
@@ -948,6 +950,21 @@ setMsg(
 }
   }
 
+  async function saveSessionData() {
+  try {
+    await apiPost("/api/session/update", {
+      sessionId: currentSession.id,
+      box,
+      patientCode,
+    });
+
+    setIsEditingSessionData(false);
+    await loadData();
+  } catch (err) {
+    console.error("Erro ao atualizar sessão:", err);
+  }
+}
+
   async function uploadPhoto() {
     setMsg("");
 
@@ -1079,76 +1096,76 @@ async function updatePhase(phase) {
 
 async function confirmStopSession() {
   setShowStopConfirmModal(false);
-  await stopSession();
-}
-async function archiveRecord(sessionId) {
-  try {
-    const data = await apiPost("/api/session/archive", { sessionId });
+    await stopSession();
+  }
+  async function archiveRecord(sessionId) {
+    try {
+      const data = await apiPost("/api/session/archive", { sessionId });
 
-    if (data.archived) {
-      setMsg({
-        text: "Registo arquivado com sucesso.",
-        type: "success",
-      });
+      if (data.archived) {
+        setMsg({
+          text: "Registo arquivado com sucesso.",
+          type: "success",
+        });
 
-      await loadData();
-      if (selectedRecord?.id === sessionId) {
-        closeRecordModal();
+        await loadData();
+        if (selectedRecord?.id === sessionId) {
+          closeRecordModal();
+        }
       }
-    }
-  } catch (error) {
-    console.error("ARCHIVE RECORD ERROR:", error);
-    setMsg({
-      text: error.message,
-      type: "warning",
-    });
-  }
-}
-
-async function restoreRecord(sessionId) {
-  try {
-    const data = await apiPost("/api/session/restore", { sessionId });
-
-    if (data.restored) {
+    } catch (error) {
+      console.error("ARCHIVE RECORD ERROR:", error);
       setMsg({
-        text: "Registo restaurado com sucesso.",
-        type: "success",
+        text: error.message,
+        type: "warning",
       });
-
-      await loadData();
     }
-  } catch (error) {
-    console.error("RESTORE RECORD ERROR:", error);
-    setMsg({
-      text: error.message,
-      type: "warning",
-    });
   }
-}
 
-async function deleteRecordPermanently(sessionId) {
-  try {
-    const data = await apiPost("/api/session/delete-permanently", { sessionId });
+  async function restoreRecord(sessionId) {
+    try {
+      const data = await apiPost("/api/session/restore", { sessionId });
 
-    if (data.deleted) {
-      setMsg({
-        text: "Registo eliminado definitivamente.",
-        type: "success",
-      });
+      if (data.restored) {
+        setMsg({
+          text: "Registo restaurado com sucesso.",
+          type: "success",
+        });
 
-      await loadData();
-      if (selectedRecord?.id === sessionId) {
-        closeRecordModal();
+        await loadData();
       }
+    } catch (error) {
+      console.error("RESTORE RECORD ERROR:", error);
+      setMsg({
+        text: error.message,
+        type: "warning",
+      });
     }
-  } catch (error) {
-    console.error("DELETE RECORD ERROR:", error);
-    setMsg({
-      text: error.message,
-      type: "warning",
-    });
   }
-}
+
+  async function deleteRecordPermanently(sessionId) {
+    try {
+      const data = await apiPost("/api/session/delete-permanently", { sessionId });
+
+      if (data.deleted) {
+        setMsg({
+          text: "Registo eliminado definitivamente.",
+          type: "success",
+        });
+
+        await loadData();
+        if (selectedRecord?.id === sessionId) {
+          closeRecordModal();
+        }
+      }
+    } catch (error) {
+      console.error("DELETE RECORD ERROR:", error);
+      setMsg({
+        text: error.message,
+        type: "warning",
+      });
+    }
+  }
 
 
 
@@ -1224,7 +1241,7 @@ async function deleteRecordPermanently(sessionId) {
         <h2 style={{ marginTop: 0, color: "#1e4a8d", fontSize: "1.7rem" }}>
           Ações
         </h2>
-        
+
 
         <p style={{ color: "#5f6b7a", marginTop: 8 }}>
           Gestão da fila e controlo do ciclo da sessão.
@@ -1260,7 +1277,7 @@ async function deleteRecordPermanently(sessionId) {
                 Atualizar
               </button>
             </div>
-            
+
 
             {isMyTurn && (
               <div style={{ marginTop: 14, color: "#1e4a8d", fontWeight: 700 }}>
@@ -1301,153 +1318,153 @@ async function deleteRecordPermanently(sessionId) {
               <button className="secondary-btn" onClick={pauseSession} disabled={!canPauseOrStop}>
                 Pausar
               </button>
-<button
-  className="secondary-btn"
-  onClick={() => setShowStopConfirmModal(true)} disabled={!canPauseOrStop}
->
-  Concluir
-</button>
+              <button
+                className="secondary-btn"
+                onClick={() => setShowStopConfirmModal(true)} disabled={!canPauseOrStop}
+              >
+                Concluir
+              </button>
             </div>
           </div>
 
-          
 
-          
-{showStopConfirmModal && (
-  <div
-    onClick={() => setShowStopConfirmModal(false)}
-    style={{
-      position: "fixed",
-      inset: 0,
-      background: "rgba(15, 23, 42, 0.45)",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      padding: 20,
-      zIndex: 9999,
-      backdropFilter: "blur(2px)",
-    }}
-  >
-    <div
-      onClick={(e) => e.stopPropagation()}
-      style={{
-        width: "100%",
-        maxWidth: 560,
-        background: "#ffffff",
-        borderRadius: 22,
-        padding: 28,
-        boxShadow: "0 30px 80px rgba(15, 23, 42, 0.22)",
-        border: "1px solid #eef2f7",
-      }}
-    >
-      <div
-        style={{
-          width: 62,
-          height: 62,
-          borderRadius: "50%",
-          background: "#fff4e5",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: "1.9rem",
-          marginBottom: 18,
-        }}
-      >
-        ⚠️
-      </div>
 
-      <h3
-        style={{
-          margin: 0,
-          marginBottom: 10,
-          color: "#1e4a8d",
-          fontSize: "1.45rem",
-          fontWeight: 800,
-        }}
-      >
-        Concluir sessão
-      </h3>
 
-      <p
-        style={{
-          margin: 0,
-          color: "#5f6b7a",
-          lineHeight: 1.7,
-          fontSize: "1rem",
-        }}
-      >
-        Pretende mesmo concluir esta sessão?
-        <br />
-        Confirme que já inseriu as fotografias associadas ao registo antes de continuar.
-      </p>
+          {showStopConfirmModal && (
+            <div
+              onClick={() => setShowStopConfirmModal(false)}
+              style={{
+                position: "fixed",
+                inset: 0,
+                background: "rgba(15, 23, 42, 0.45)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: 20,
+                zIndex: 9999,
+                backdropFilter: "blur(2px)",
+              }}
+            >
+              <div
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  width: "100%",
+                  maxWidth: 560,
+                  background: "#ffffff",
+                  borderRadius: 22,
+                  padding: 28,
+                  boxShadow: "0 30px 80px rgba(15, 23, 42, 0.22)",
+                  border: "1px solid #eef2f7",
+                }}
+              >
+                <div
+                  style={{
+                    width: 62,
+                    height: 62,
+                    borderRadius: "50%",
+                    background: "#fff4e5",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: "1.9rem",
+                    marginBottom: 18,
+                  }}
+                >
+                  ⚠️
+                </div>
 
-      <div
-        style={{
-          marginTop: 24,
-          padding: "14px 16px",
-          borderRadius: 14,
-          background: "#f8fbff",
-          border: "1px solid #e3edf8",
-          color: "#48607a",
-          fontSize: "0.95rem",
-          lineHeight: 1.6,
-        }}
-      >
-        A sessão só será concluída se existirem fotografias associadas.
-      </div>
+                <h3
+                  style={{
+                    margin: 0,
+                    marginBottom: 10,
+                    color: "#1e4a8d",
+                    fontSize: "1.45rem",
+                    fontWeight: 800,
+                  }}
+                >
+                  Concluir sessão
+                </h3>
 
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "flex-end",
-          gap: 12,
-          flexWrap: "wrap",
-          marginTop: 26,
-        }}
-      >
-        <button
-          type="button"
-          className="secondary-btn"
-          onClick={() => setShowStopConfirmModal(false)}
-        >
-          Cancelar
-        </button>
+                <p
+                  style={{
+                    margin: 0,
+                    color: "#5f6b7a",
+                    lineHeight: 1.7,
+                    fontSize: "1rem",
+                  }}
+                >
+                  Pretende mesmo concluir esta sessão?
+                  <br />
+                  Confirme que já inseriu as fotografias associadas ao registo antes de continuar.
+                </p>
 
-        <button
-          type="button"
-          className="primary-btn"
-          onClick={confirmStopSession}
-        >
-          Confirmar conclusão
-        </button>
-      </div>
-    </div>
-  </div>
-)}
-          
+                <div
+                  style={{
+                    marginTop: 24,
+                    padding: "14px 16px",
+                    borderRadius: 14,
+                    background: "#f8fbff",
+                    border: "1px solid #e3edf8",
+                    color: "#48607a",
+                    fontSize: "0.95rem",
+                    lineHeight: 1.6,
+                  }}
+                >
+                  A sessão só será concluída se existirem fotografias associadas.
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "flex-end",
+                    gap: 12,
+                    flexWrap: "wrap",
+                    marginTop: 26,
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="secondary-btn"
+                    onClick={() => setShowStopConfirmModal(false)}
+                  >
+                    Cancelar
+                  </button>
+
+                  <button
+                    type="button"
+                    className="primary-btn"
+                    onClick={confirmStopSession}
+                  >
+                    Confirmar conclusão
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
         </div>
 
 
-{msg.text && (
-  <p
-    style={{
-      fontWeight: 600,
-      marginTop: "10px",
-      color:
-        msg.type === "warning"
-          ? "#dc2626"
-          : msg.type === "success"
-          ? "#16a34a"
-          : "#2563eb"
-    }}
-  >
-    {msg.type === "warning" && "⚠️ "}
-    {msg.type === "success" && "✅ "}
-    {msg.type === "info" && "ℹ️ "}
-    {msg.text}
-  </p>
-)}
-  </section>
+        {msg.text && (
+          <p
+            style={{
+              fontWeight: 600,
+              marginTop: "10px",
+              color:
+                msg.type === "warning"
+                  ? "#dc2626"
+                  : msg.type === "success"
+                    ? "#16a34a"
+                    : "#2563eb"
+            }}
+          >
+            {msg.type === "warning" && "⚠️ "}
+            {msg.type === "success" && "✅ "}
+            {msg.type === "info" && "ℹ️ "}
+            {msg.text}
+          </p>
+        )}
+      </section>
 
       <section
         style={{
@@ -1540,85 +1557,85 @@ async function deleteRecordPermanently(sessionId) {
           )}
         </div>
         <div
-  style={{
-    marginTop: 18,
-    padding: 18,
-    border: "1px solid #dbe5f0",
-    borderRadius: 18,
-    background: "#f8fbff",
-  }}
->
-  <div
-    style={{
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "center",
-      gap: 12,
-      flexWrap: "wrap",
-      marginBottom: 14,
-    }}
-  >
-    <div>
-      <div
-        style={{
-          fontWeight: 800,
-          color: "#1e4a8d",
-          fontSize: "1rem",
-          marginBottom: 4,
-        }}
-      >
-        Fase da captura
-      </div>
-      <div style={{ color: "#6b7280", fontSize: "0.95rem" }}>
-        Define em que etapa as próximas fotografias devem ser associadas.
-      </div>
-    </div>
+          style={{
+            marginTop: 18,
+            padding: 18,
+            border: "1px solid #dbe5f0",
+            borderRadius: 18,
+            background: "#f8fbff",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 12,
+              flexWrap: "wrap",
+              marginBottom: 14,
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  fontWeight: 800,
+                  color: "#1e4a8d",
+                  fontSize: "1rem",
+                  marginBottom: 4,
+                }}
+              >
+                Fase da captura
+              </div>
+              <div style={{ color: "#6b7280", fontSize: "0.95rem" }}>
+                Define em que etapa as próximas fotografias devem ser associadas.
+              </div>
+            </div>
 
-    <div
-      style={{
-        padding: "8px 14px",
-        borderRadius: 999,
-        background: "#e9f2fd",
-        color: "#1e4a8d",
-        fontWeight: 700,
-      }}
-    >
-     Atual: {formatPhaseLabel(currentPhase)}
-    </div>
-  </div>
+            <div
+              style={{
+                padding: "8px 14px",
+                borderRadius: 999,
+                background: "#e9f2fd",
+                color: "#1e4a8d",
+                fontWeight: 700,
+              }}
+            >
+              Atual: {formatPhaseLabel(currentPhase)}
+            </div>
+          </div>
 
-  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-    <button
-      className={currentPhase === "before" ? "primary-btn" : "secondary-btn"}
-      onClick={() => updatePhase("before")}
-      type="button"
-    >
-      Inicial
-    </button>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button
+              className={currentPhase === "before" ? "primary-btn" : "secondary-btn"}
+              onClick={() => updatePhase("before")}
+              type="button"
+            >
+              Inicial
+            </button>
 
-    <button
-      className={currentPhase === "during" ? "primary-btn" : "secondary-btn"}
-      onClick={() => updatePhase("during")}
-      type="button"
-    >
-      Durante
-    </button>
+            <button
+              className={currentPhase === "during" ? "primary-btn" : "secondary-btn"}
+              onClick={() => updatePhase("during")}
+              type="button"
+            >
+              Durante
+            </button>
 
-    <button
-      className={currentPhase === "after" ? "primary-btn" : "secondary-btn"}
-      onClick={() => updatePhase("after")}
-      type="button"
-    >
-      Final
-    </button>
-  </div>
-</div>
+            <button
+              className={currentPhase === "after" ? "primary-btn" : "secondary-btn"}
+              onClick={() => updatePhase("after")}
+              type="button"
+            >
+              Final
+            </button>
+          </div>
+        </div>
 
-<div style={{ marginTop: 20 }}>
-  <h3 style={{ marginBottom: 10 }}>👩‍🏫 Professores com acesso</h3>
+        <div style={{ marginTop: 20 }}>
+          <h3 style={{ marginBottom: 10 }}>👩‍🏫 Professores com acesso</h3>
 
-  {/* Dropdown */}
-  {/*<div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+          {/* Dropdown */}
+          {/*<div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
     <select
       value={selectedTeacherId}
       onChange={(e) => setSelectedTeacherId(e.target.value)}
@@ -1655,8 +1672,8 @@ async function deleteRecordPermanently(sessionId) {
   </div>
 */}
 
-  {/* Lista */}
-    {/*<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {/* Lista */}
+          {/*<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
     {sessionTeachers.length === 0 && (
       <span style={{ color: "#777" }}>
         Nenhum professor associado
@@ -1677,7 +1694,7 @@ async function deleteRecordPermanently(sessionId) {
     ))}
   </div>
   */}
-</div>
+        </div>
 
         <div
           className="card"
@@ -1707,12 +1724,29 @@ async function deleteRecordPermanently(sessionId) {
                 Código do paciente
               </label>
               <input autoFocus value={patientCode} onChange={(e) => setPatientCode(e.target.value)} onKeyDown={(e) => {
-    if (e.key === "Enter") {
-      startSession();
-    }
-  }} placeholder="Introduza o código" />
+                if (e.key === "Enter") {
+                  startSession();
+                }
+              }} placeholder="Introduza o código" />
+
+              {currentSession && (
+                <div style={{ marginTop: 10 }}>
+                  {!isEditingSessionData ? (
+                    <button onClick={() => setIsEditingSessionData(true)}>
+                      Editar
+                    </button>
+                  ) : (
+                    <>
+                      <button onClick={saveSessionData}>Guardar</button>
+                      <button onClick={() => setIsEditingSessionData(false)}>
+                        Cancelar
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
-            
+
 
             <div
               style={{
