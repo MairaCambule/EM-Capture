@@ -1711,6 +1711,7 @@ async function confirmStopSession() {
             Preparação da sessão ativa e carregamento de fotografias.
           </p>
 
+
           <div style={{ display: "grid", gap: 16, marginTop: 22 }}>
   <div>
     <label
@@ -1726,7 +1727,7 @@ async function confirmStopSession() {
     <input
       value={box}
       onChange={(e) => setBox(e.target.value)}
-      placeholder="Introduza a Box TESTE"
+      placeholder="Introduza a Box"
       disabled={!isEditingSessionData && !!currentSession}
     />
   </div>
@@ -1782,38 +1783,11 @@ async function confirmStopSession() {
     )}
   </div>
 )}
+  
+  
         </div>
       </section>
 
-      <section>
-
-             <div style={{ fontWeight: 700, color: "#1e4a8d", marginBottom: 8 }}>
-                Carregar fotografias
-              </div>
-              <div style={{ display: "grid", gap: 12 }}>
-                <select value={photoPhase} onChange={(e) => setPhotoPhase(e.target.value)}>
-                  <option value="before">Inicial</option>
-                  <option value="during">Durante</option>
-                  <option value="after">Final</option>
-                </select>
-
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
-                />
-
-                <button
-                  className="secondary-btn"
-                  onClick={uploadPhoto}
-                  disabled={!canUploadPhotos || uploadingPhoto}
-                >
-                  {uploadingPhoto ? "A carregar..." : "Carregar fotografia"}
-                </button>
-              </div>
-
-
-      </section>
       
 
       <section
