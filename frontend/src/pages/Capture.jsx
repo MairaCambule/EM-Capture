@@ -169,16 +169,12 @@ useEffect(() => {
       setModuleRole(currentModuleRole);
     }
 
-    const isActiveState =
+const isActiveState =
   stateData?.status === "in_use" ||
   stateData?.status === "reserved" ||
-  stateData?.status === "paused"; // 👈 ADICIONA ISTO
+  stateData?.status === "paused";
 
-if (!isActiveState) {
-  setCurrentSession(null);
-  setBox("");
-  setPatientCode("");
-} else if (stateData?.current_session_id) {
+if (isActiveState && stateData?.current_session_id) {
   const { data, error } = await supabase
     .from("clinical_sessions")
     .select("*")
@@ -193,7 +189,10 @@ if (!isActiveState) {
   }
 } else {
   setCurrentSession(null);
+  setBox("");
+  setPatientCode("");
 }
+
     // Buscar todos os user_id possíveis para montar o mapa de nomes
     const { data: allSessionsForNames, error: allSessionsForNamesError } =
       await supabase.from("clinical_sessions").select("user_id");
