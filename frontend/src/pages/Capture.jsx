@@ -1711,6 +1711,50 @@ async function confirmStopSession() {
             Preparação da sessão ativa e carregamento de fotografias.
           </p>
 
+          <div>
+  <label
+    style={{
+      display: "block",
+      marginBottom: 8,
+      color: "#5f6b7a",
+      fontWeight: 600,
+    }}
+  >
+    Box
+  </label>
+  <input
+    value={box}
+    onChange={(e) => setBox(e.target.value)}
+    placeholder="Introduza a Box"
+    disabled={!isEditingSessionData && !!currentSession}
+  />
+</div>
+
+<div>
+  <label
+    style={{
+      display: "block",
+      marginBottom: 8,
+      color: "#5f6b7a",
+      fontWeight: 600,
+    }}
+  >
+    Código do paciente
+  </label>
+  <input
+    autoFocus={!currentSession}
+    value={patientCode}
+    onChange={(e) => setPatientCode(e.target.value)}
+    disabled={!isEditingSessionData && !!currentSession}
+    onKeyDown={(e) => {
+      if (e.key === "Enter") {
+        startSession();
+      }
+    }}
+    placeholder="Introduza o código"
+  />
+</div>
+
 
           <div style={{ display: "grid", gap: 16, marginTop: 22 }}>
   <div>
