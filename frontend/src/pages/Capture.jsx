@@ -1726,7 +1726,7 @@ async function confirmStopSession() {
     <input
       value={box}
       onChange={(e) => setBox(e.target.value)}
-      placeholder="Introduza a Box"
+      placeholder="Introduza a Box TESTE"
       disabled={!isEditingSessionData && !!currentSession}
     />
   </div>
