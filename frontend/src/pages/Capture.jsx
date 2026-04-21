@@ -820,10 +820,14 @@ export default function Capture({ session }) {
   }, [cameraState, myNotifiedEntry, loadData, expiringTurn]);
 
   useEffect(() => {
-    if (isMyTurn) {
-      setShowTurnModal(true);
-    }
-  }, [isMyTurn]);
+  if (isMyTurn && !isCurrentUserUsingCamera) {
+    setShowTurnModal(true);
+
+    // 🔥 limpar campos para NOVA sessão
+    setBox("");
+    setPatientCode("");
+  }
+}, [isMyTurn, isCurrentUserUsingCamera]);
 
   useEffect(() => {
     if (!isMyTurn) {
@@ -1775,24 +1779,42 @@ export default function Capture({ session }) {
                 Box
               </label>
               <input
-                value={box}
-                onChange={(e) => setBox(e.target.value)}
-                placeholder="Introduza a Box"
-                disabled={!!currentSession && !isEditingSessionData}
-              />
+  autoFocus={!currentSession}
+  value={patientCode}
+  onChange={(e) => setPatientCode(e.target.value)}
+  placeholder="Introduza o código"
+  disabled={!!currentSession && !isEditingSessionData}
+  onKeyDown={(e) => {
+    if (e.key === "Enter" && canStartSession) {
+      startSession();
+    }
+  }}
+/>
+            </div>
 
-              <input
-                autoFocus={!currentSession}
-                value={patientCode}
-                onChange={(e) => setPatientCode(e.target.value)}
-                disabled={!!currentSession && !isEditingSessionData}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && canStartSession) {
-                    startSession();
-                  }
+            <div>
+              <label
+                style={{
+                  display: "block",
+                  marginBottom: 8,
+                  color: "#5f6b7a",
+                  fontWeight: 600,
                 }}
-                placeholder="Introduza o código"
-              />
+              >
+                Código do paciente
+              </label>
+           <input
+  autoFocus={!currentSession}
+  value={patientCode}
+  onChange={(e) => setPatientCode(e.target.value)}
+  placeholder="Introduza o código"
+  disabled={!!currentSession && !isEditingSessionData}
+  onKeyDown={(e) => {
+    if (e.key === "Enter" && canStartSession) {
+      startSession();
+    }
+  }}
+/>
             </div>
           </div>
 
