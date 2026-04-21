@@ -676,6 +676,90 @@ app.get("/api/camera/active-session", async (req, res) => {
   }
 });
 
+
+app.post("/api/session/update", requireAuth, async (req, res) => {
+  try {
+    const { sessionId, box, patientCode } = req.body;
+    const userId = req.user.id;
+
+    if (!sessionId) {
+      return res.status(400).json({ error: "sessionId é obrigatório." });
+    }
+
+    // 🔍 Buscar sessão
+    const { data: sessionData, error: sessionError } = await supabaseAdmin
+      .from("clinical_sessions")
+      .select("*")
+      .eq("id", sessionId)
+      .single();
+
+    if (sessionError || !sessionData) {
+      return res.status(404).json({ error: "Sessão não encontrada." });
+    }
+
+    // 🔒 Segurança: só o dono pode editar
+    if (sessionData.user_id !== userId) {
+      return res.status(403).json({ error: "Sem permissão para editar esta sessão." });
+    }
+
+    // 🔒 Só pode editar se estiver ativa ou pausada
+    if (!["open", "paused"].includes(sessionData.status)) {
+      return res.status(400).json({
+        error: "Só é possível editar sessões ativas ou pausadas.",
+      });
+    }
+
+    // 🧠 Atualizar sessão
+    const { data: updatedSession, error: updateError } = await supabaseAdmin
+      .from("clinical_sessions")
+      .update({
+        box: box || sessionData.box,
+        patient_code: patientCode || sessionData.patient_code,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", sessionId)
+      .select()
+      .single();
+
+    if (updateError) {
+      return res.status(400).json({ error: updateError.message });
+    }
+
+    // 🔄 Atualizar também o estado da câmara
+    await supabaseAdmin
+      .from("camera_state")
+      .update({
+        current_box: box || sessionData.box,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("camera_id", sessionData.camera_id);
+
+    // 🧾 Auditoria (MUITO IMPORTANTE 👇)
+    await supabaseAdmin.from("audit_events").insert({
+      actor_user_id: userId,
+      camera_id: sessionData.camera_id,
+      session_id: sessionId,
+      type: "UPDATE_SESSION",
+      payload: {
+        old_box: sessionData.box,
+        new_box: box,
+        old_patient_code: sessionData.patient_code,
+        new_patient_code: patientCode,
+      },
+    });
+
+    return res.json({
+      updated: true,
+      session: updatedSession,
+    });
+  } catch (err) {
+    console.error("UPDATE SESSION ERROR:", err);
+    return res.status(500).json({ error: "Erro interno ao atualizar sessão." });
+  }
+});
+
+
+
 app.get("/api/teachers", requireAuth, async (req, res) => {
   try {
     const { data, error } = await supabaseAdmin
