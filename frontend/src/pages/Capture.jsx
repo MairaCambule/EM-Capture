@@ -82,6 +82,9 @@ export default function Capture({ session }) {
   const [allRecords, setAllRecords] = useState([]);
 
   const [pendingResumeRecord, setPendingResumeRecord] = useState(null);
+  
+  const [draftBox, setDraftBox] = useState("");
+  const [draftPatientCode, setDraftPatientCode] = useState("");
 
   const currentUserId = session?.user?.id;
 
@@ -123,8 +126,7 @@ const canStartSessionFinal = canStartSession && hasRequiredSessionData;
 
   const [isPreparingSession, setIsPreparingSession] = useState(false);
 
-  const [draftBox, setDraftBox] = useState("");
-  const [draftPatientCode, setDraftPatientCode] = useState("");
+  
 
 
   useEffect(() => {
