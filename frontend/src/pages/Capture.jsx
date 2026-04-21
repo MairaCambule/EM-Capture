@@ -1778,17 +1778,11 @@ export default function Capture({ session }) {
               >
                 Box
               </label>
-              <input
-  autoFocus={!currentSession}
-  value={patientCode}
-  onChange={(e) => setPatientCode(e.target.value)}
-  placeholder="Introduza o código"
+<input
+  value={box}
+  onChange={(e) => setBox(e.target.value)}
+  placeholder="Introduza a Box"
   disabled={!!currentSession && !isEditingSessionData}
-  onKeyDown={(e) => {
-    if (e.key === "Enter" && canStartSession) {
-      startSession();
-    }
-  }}
 />
             </div>
 
