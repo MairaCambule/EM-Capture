@@ -85,6 +85,34 @@ export default function Capture({ session }) {
 
   const currentUserId = session?.user?.id;
 
+  const isCurrentUserUsingCamera =
+    cameraState?.status === "in_use" &&
+    cameraState?.current_user_id === currentUserId &&
+    !!cameraState?.current_session_id;
+
+  const isCurrentUserReserved =
+    cameraState?.status === "reserved" &&
+    cameraState?.current_user_id === currentUserId;
+
+  const isOtherUserUsingCamera =
+    cameraState?.status === "in_use" &&
+    cameraState?.current_user_id &&
+    cameraState?.current_user_id !== currentUserId;
+
+  const isOtherUserReserved =
+    cameraState?.status === "reserved" &&
+    cameraState?.current_user_id &&
+    cameraState?.current_user_id !== currentUserId;
+
+  const canStartSession = isCurrentUserReserved && !isCurrentUserUsingCamera;
+  const canPauseSession = isCurrentUserUsingCamera;
+  const canStopSession = isCurrentUserUsingCamera;
+
+  const canEditSessionData =
+    !!currentSession &&
+    currentSession?.user_id === currentUserId &&
+    (currentSession?.status === "open" || currentSession?.status === "paused");
+
 
   useEffect(() => {
     if (!session?.access_token) return;
@@ -179,7 +207,7 @@ export default function Capture({ session }) {
         stateData?.status === "in_use" ||
         stateData?.status === "paused";
 
-      if (canShowSessionId && stateData?.current_session_id) {
+      if (stateData?.status === "in_use" && stateData?.current_session_id) {
         const { data, error } = await supabase
           .from("clinical_sessions")
           .select("*")
@@ -189,6 +217,8 @@ export default function Capture({ session }) {
         if (error) {
           console.error("Erro ao buscar sessão:", error);
           setCurrentSession(null);
+          setBox("");
+          setPatientCode("");
         } else {
           setCurrentSession(data || null);
           setBox(data?.box || "");
@@ -196,14 +226,8 @@ export default function Capture({ session }) {
         }
       } else {
         setCurrentSession(null);
-
-        if (!canShowPatientCode) {
-          setPatientCode("");
-        }
-
-        if (stateData?.status === "available") {
-          setBox("");
-        }
+        setBox("");
+        setPatientCode("");
       }
 
       // Buscar todos os user_id possíveis para montar o mapa de nomes
@@ -613,10 +637,10 @@ export default function Capture({ session }) {
         setCurrentPhase(phase);
         setMsg({
           text: `Fase atual definida como ${phase === "before"
-              ? "Antes"
-              : phase === "during"
-                ? "Durante"
-                : "Depois"
+            ? "Antes"
+            : phase === "during"
+              ? "Durante"
+              : "Depois"
             }.`,
           type: "success",
         });
@@ -1333,7 +1357,7 @@ export default function Capture({ session }) {
             </div>
 
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <button className="primary-btn" onClick={startSession} disabled={!patientCode || !box}>
+              <button className="primary-btn" onClick={startSession} disabled={!patientCode || !box} disabled={!canStartSession} >
                 Iniciar
               </button>
 
@@ -1342,7 +1366,7 @@ export default function Capture({ session }) {
               </button>
               <button
                 className="secondary-btn"
-                onClick={() => setShowStopConfirmModal(true)} disabled={!canPauseOrStop}
+                onClick={() => setShowStopConfirmModal(true)} disabled={!canStopSession}
               >
                 Concluir
               </button>
@@ -1562,31 +1586,21 @@ export default function Capture({ session }) {
               <div style={{ padding: 18, borderRadius: 18, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
                 <div style={{ color: "#7f8b99", marginBottom: 8 }}>Box atual</div>
                 <div style={{ fontWeight: 700, color: "#17324d" }}>
-                  <p>{cameraState?.status === "available" ? "—" : cameraState?.current_box || "—"}</p>
+                  <p>{cameraState?.status === "in_use" ? cameraState?.current_box || "—" : "—"}</p>
                 </div>
               </div>
 
               <div style={{ padding: 18, borderRadius: 18, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
                 <div style={{ color: "#7f8b99", marginBottom: 8 }}>Sessão atual</div>
                 <div style={{ fontWeight: 700, color: "#17324d", wordBreak: "break-word" }}>
-                  <p>
-                    {cameraState?.status === "in_use" || cameraState?.status === "paused"
-                      ? currentSession?.id || "—"
-                      : "—"}
-                  </p>
+                  <p>{cameraState?.status === "in_use" ? currentSession?.id || "—" : "—"}</p>
                 </div>
               </div>
 
               <div style={{ padding: 18, borderRadius: 18, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
                 <div style={{ color: "#7f8b99", marginBottom: 8 }}>Código do paciente</div>
                 <div style={{ fontWeight: 700, color: "#17324d" }}>
-                  <p>
-                    {cameraState?.status === "reserved" ||
-                      cameraState?.status === "in_use" ||
-                      cameraState?.status === "paused"
-                      ? currentSession?.patient_code || patientCode || "—"
-                      : "—"}
-                  </p>
+                  <p>{cameraState?.status === "in_use" ? currentSession?.patient_code || "—" : "—"}</p>
                 </div>
               </div>
             </div>
@@ -1764,28 +1778,16 @@ export default function Capture({ session }) {
                 value={box}
                 onChange={(e) => setBox(e.target.value)}
                 placeholder="Introduza a Box"
-                disabled={!isEditingSessionData && !!currentSession}
+                disabled={!!currentSession && !isEditingSessionData}
               />
-            </div>
 
-            <div>
-              <label
-                style={{
-                  display: "block",
-                  marginBottom: 8,
-                  color: "#5f6b7a",
-                  fontWeight: 600,
-                }}
-              >
-                Código do paciente
-              </label>
               <input
                 autoFocus={!currentSession}
                 value={patientCode}
                 onChange={(e) => setPatientCode(e.target.value)}
-                disabled={!isEditingSessionData && !!currentSession}
+                disabled={!!currentSession && !isEditingSessionData}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && !currentSession) {
+                  if (e.key === "Enter" && canStartSession) {
                     startSession();
                   }
                 }}
@@ -1794,7 +1796,7 @@ export default function Capture({ session }) {
             </div>
           </div>
 
-          {currentSession && (
+          {canEditSessionData && (
             <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
               {!isEditingSessionData ? (
                 <button type="button" onClick={() => setIsEditingSessionData(true)}>
