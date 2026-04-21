@@ -112,6 +112,12 @@ useEffect(() => {
 
     setCameraState(stateData);
 
+    if (stateData?.status === "available") {
+  setCurrentSession(null);
+  setBox("");
+  setPatientCode("");
+}
+
     setCurrentPhase(stateData?.current_phase || "during");
 
     const { data: queueData, error: queueError } = await supabase
@@ -163,21 +169,25 @@ useEffect(() => {
       setModuleRole(currentModuleRole);
     }
 
-    if (stateData?.current_session_id) {
-      const { data: sessionData, error: sessionError } = await supabase
-        .from("clinical_sessions")
-        .select("*")
-        .eq("id", stateData.current_session_id)
-        .maybeSingle();
+   if (stateData?.status !== "in_use" && stateData?.status !== "reserved") {
+  setCurrentSession(null);
+  setBox("");
+  setPatientCode("");
+} else if (stateData?.current_session_id) {
+  const { data: sessionData, error: sessionError } = await supabase
+    .from("clinical_sessions")
+    .select("*")
+    .eq("id", stateData.current_session_id)
+    .maybeSingle();
 
-      if (!sessionError) {
-        setCurrentSession(sessionData || null);
-      } else {
-        setCurrentSession(null);
-      }
-    } else {
-      setCurrentSession(null);
-    }
+  if (!sessionError) {
+    setCurrentSession(sessionData || null);
+  } else {
+    setCurrentSession(null);
+  }
+} else {
+  setCurrentSession(null);
+}
 
     // Buscar todos os user_id possíveis para montar o mapa de nomes
     const { data: allSessionsForNames, error: allSessionsForNamesError } =
@@ -1519,7 +1529,7 @@ async function deleteRecordPermanently(sessionId) {
               <div style={{ padding: 18, borderRadius: 18, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
                 <div style={{ color: "#7f8b99", marginBottom: 8 }}>Código do paciente</div>
                 <div style={{ fontWeight: 700, color: "#17324d" }}>
-                  {currentSession?.patient_code || "—"}
+                  <p>{cameraState?.status === "available" ? "—" : currentSession?.patient_code || "—"}</p>
                 </div>
               </div>
             </div>
@@ -1961,7 +1971,7 @@ async function deleteRecordPermanently(sessionId) {
     Arquivar
   </button>
 )}
-                  </tr>
+            </tr>
                 ))}
               </tbody>
             </table>
