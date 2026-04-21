@@ -76,13 +76,26 @@ export default function Capture({ session }) {
 
   const [photoPreviewMap, setPhotoPreviewMap] = useState({});
 
+  const [recordsFilterMode, setRecordsFilterMode] = useState("active");
+
   const [profile, setProfile] = useState(null);
   const [moduleRole, setModuleRole] = useState("user");
   const [recordsView, setRecordsView] = useState("mine");
   const [allRecords, setAllRecords] = useState([]);
 
+  const baseRecords =
+  recordsView === "all" && canViewAllRecords ? allRecords : myRecords;
+
+const filteredRecordsByArchive = baseRecords.filter((record) => {
+  if (recordsFilterMode === "active") return !record.is_archived;
+  if (recordsFilterMode === "archived") return !!record.is_archived;
+  return true;
+});
+
+ 
+
   const [pendingResumeRecord, setPendingResumeRecord] = useState(null);
-  
+
   const [draftBox, setDraftBox] = useState("");
   const [draftPatientCode, setDraftPatientCode] = useState("");
 
@@ -2000,6 +2013,38 @@ async function startSession() {
               marginBottom: 18,
             }}
           >
+            <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+  <button
+    type="button"
+    onClick={() => setRecordsFilterMode("active")}
+    style={{
+      opacity: recordsFilterMode === "active" ? 1 : 0.7,
+    }}
+  >
+    Ativos
+  </button>
+
+  <button
+    type="button"
+    onClick={() => setRecordsFilterMode("archived")}
+    style={{
+      opacity: recordsFilterMode === "archived" ? 1 : 0.7,
+    }}
+  >
+    Arquivados
+  </button>
+
+  <button
+    type="button"
+    onClick={() => setRecordsFilterMode("all")}
+    style={{
+      opacity: recordsFilterMode === "all" ? 1 : 0.7,
+    }}
+  >
+    Todos
+  </button>
+</div>
+
             <div>
               <h2 style={{ margin: 0, color: "#1e4a8d", fontSize: "1.7rem" }}>
                 {recordsView === "all" ? "Todos os registos" : "Meus registos"}
@@ -2070,6 +2115,17 @@ async function startSession() {
             />
           </div>
         </div>
+        {record.is_archived && (
+  <div style={{ marginTop: 8, color: "#b45309", fontWeight: 600 }}>
+    Arquivado
+    {record.archived_at
+      ? ` em ${new Date(record.archived_at).toLocaleString()}`
+      : ""}
+    {record.archived_by_user_id
+      ? ` por ${profilesMap[record.archived_by_user_id] || record.archived_by_user_id}`
+      : ""}
+  </div>
+)}
 
         {filteredRecords.length === 0 ? (
           <p style={{ color: "#5f6b7a" }}>Ainda não existem registos para mostrar.</p>
@@ -2089,7 +2145,7 @@ async function startSession() {
                 </tr>
               </thead>
               <tbody>
-                {filteredRecords.map((record) => (
+                {filteredRecordsByArchive.map((record) => (
                   <tr key={record.id}>
                     <td>
                       {record.started_at
@@ -2109,15 +2165,37 @@ async function startSession() {
                         🔍
                       </button>
                     </td>
-                    {!record.is_archived && (
-                      <button
-                        className="secondary-btn"
-                        onClick={() => archiveRecord(record.id)}
-                        type="button"
-                      >
-                        Arquivar
-                      </button>
-                    )}
+                    <td>
+  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+    {!record.is_archived && (
+      <button
+        type="button"
+        onClick={() => archiveRecord(record.id)}
+      >
+        Arquivar
+      </button>
+    )}
+
+    {record.is_archived && canViewAllRecords && (
+      <>
+        <button
+          type="button"
+          onClick={() => restoreRecord(record.id)}
+        >
+          Restaurar
+        </button>
+
+        <button
+          type="button"
+          onClick={() => deleteRecordPermanently(record.id)}
+        >
+          Eliminar definitivo
+        </button>
+      </>
+    )}
+  </div>
+</td>
+                
                   </tr>
                 ))}
               </tbody>
