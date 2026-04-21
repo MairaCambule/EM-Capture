@@ -113,15 +113,18 @@ export default function Capture({ session }) {
     currentSession?.user_id === currentUserId &&
     (currentSession?.status === "open" || currentSession?.status === "paused");
 
-  const hasRequiredSessionData =
-    box.trim() !== "" && patientCode.trim() !== "";
+const hasRequiredSessionData =
+  draftBox.trim() !== "" && draftPatientCode.trim() !== "";
 
-  const canStartSessionFinal = canStartSession && hasRequiredSessionData;
+const canStartSessionFinal = canStartSession && hasRequiredSessionData;
 
   const canSeeSessionClinic =
     isCurrentUserUsingCamera || isCurrentUserReserved;
 
   const [isPreparingSession, setIsPreparingSession] = useState(false);
+
+  const [draftBox, setDraftBox] = useState("");
+  const [draftPatientCode, setDraftPatientCode] = useState("");
 
 
   useEffect(() => {
@@ -227,25 +230,17 @@ export default function Capture({ session }) {
         if (error) {
           console.error("Erro ao buscar sessão:", error);
           setCurrentSession(null);
-
-          if (!isPreparingSession) {
-            setBox("");
-            setPatientCode("");
-          }
+          setBox("");
+          setPatientCode("");
         } else {
           setCurrentSession(data || null);
           setBox(data?.box || "");
           setPatientCode(data?.patient_code || "");
-          setIsPreparingSession(false);
         }
       } else {
         setCurrentSession(null);
-
-        // Só limpa automaticamente se NÃO estiveres a preparar nova sessão
-        if (!isPreparingSession) {
-          setBox("");
-          setPatientCode("");
-        }
+        setBox("");
+        setPatientCode("");
       }
 
 
@@ -839,14 +834,11 @@ export default function Capture({ session }) {
   useEffect(() => {
     if (isMyTurn && !isCurrentUserUsingCamera) {
       setShowTurnModal(true);
-
-      if (!currentSession) {
-        setBox("");
-        setPatientCode("");
-        setIsPreparingSession(false);
-      }
+      setDraftBox("");
+      setDraftPatientCode("");
     }
-  }, [isMyTurn, isCurrentUserUsingCamera, currentSession]);
+  }, [isMyTurn, isCurrentUserUsingCamera]);
+
 
   useEffect(() => {
     if (!isMyTurn) {
@@ -885,56 +877,36 @@ export default function Capture({ session }) {
   }
 
 
-  async function startSession() {
+async function startSession() {
+  try {
     setMsg("");
 
-    if (!patientCode.trim()) {
+    const data = await apiPost("/api/session/start", {
+      cameraId: CAMERA_ID,
+      patientCode: draftPatientCode,
+      box: draftBox,
+    });
+
+    if (data.started) {
       setMsg({
-        text: "Introduza o código do paciente e o nº da Box antes de iniciar a sessão.",
-        type: "warning"
-      });
-      return;
-    }
-
-    if (!box.trim()) {
-      setMsg("Introduza a box antes de iniciar.");
-      return;
-    }
-
-    try {
-      const data = await apiPost("/api/session/start", {
-        cameraId: CAMERA_ID,
-        patientCode: patientCode.trim(),
-        box: box.trim(),
+        text: "Sessão iniciada com sucesso.",
+        type: "success",
       });
 
-      if (data.started) {
-        setMsg({
-          text: `Sessão iniciada com sucesso. ID: ${data.sessionId}`,
-          type: "success",
-        });
-        setIsPreparingSession(false);
-
-        setPendingResumeRecord(null);
-        setBox("");
-        setPatientCode("");
-      } else {
-        setMsg({
-          text: "Não foi possível iniciar a sessão.",
-          type: "warning",
-        });
-      }
+      setDraftBox("");
+      setDraftPatientCode("");
+      setShowTurnModal(false);
 
       await loadData();
-
-    } catch (error) {
-      console.error("START SESSION ERROR:", error);
-      setMsg({
-        text: error.message,
-        type: "warning",
-      });
     }
+  } catch (error) {
+    console.error("START SESSION ERROR:", error);
+    setMsg({
+      text: error.message,
+      type: "warning",
+    });
   }
+}
 
   async function pauseSession() {
     setMsg("");
@@ -1799,10 +1771,13 @@ export default function Capture({ session }) {
                   Box
                 </label>
                 <input
-                  value={box}
+                  value={currentSession && !isEditingSessionData ? box : currentSession && isEditingSessionData ? box : draftBox}
                   onChange={(e) => {
-                    setIsPreparingSession(true);
-                    setBox(e.target.value);
+                    if (currentSession) {
+                      setBox(e.target.value);
+                    } else {
+                      setDraftBox(e.target.value);
+                    }
                   }}
                   placeholder="Introduza a Box"
                   disabled={!!currentSession && !isEditingSessionData}
@@ -1822,10 +1797,19 @@ export default function Capture({ session }) {
                 </label>
                 <input
                   autoFocus={!currentSession}
-                  value={patientCode}
+                  value={
+                    currentSession && !isEditingSessionData
+                      ? patientCode
+                      : currentSession && isEditingSessionData
+                        ? patientCode
+                        : draftPatientCode
+                  }
                   onChange={(e) => {
-                    setIsPreparingSession(true);
-                    setPatientCode(e.target.value);
+                    if (currentSession) {
+                      setPatientCode(e.target.value);
+                    } else {
+                      setDraftPatientCode(e.target.value);
+                    }
                   }}
                   placeholder="Introduza o código"
                   disabled={!!currentSession && !isEditingSessionData}
