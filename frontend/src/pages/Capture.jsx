@@ -171,12 +171,15 @@ useEffect(() => {
       setModuleRole(currentModuleRole);
     }
 
-const isActiveState =
-  stateData?.status === "in_use" ||
+const canShowSessionId =
+  stateData?.status === "in_use" || stateData?.status === "paused";
+
+const canShowPatientCode =
   stateData?.status === "reserved" ||
+  stateData?.status === "in_use" ||
   stateData?.status === "paused";
 
-if (isActiveState && stateData?.current_session_id) {
+if (canShowSessionId && stateData?.current_session_id) {
   const { data, error } = await supabase
     .from("clinical_sessions")
     .select("*")
@@ -188,11 +191,19 @@ if (isActiveState && stateData?.current_session_id) {
     setCurrentSession(null);
   } else {
     setCurrentSession(data || null);
+    setBox(data?.box || "");
+    setPatientCode(data?.patient_code || "");
   }
 } else {
   setCurrentSession(null);
-  setBox("");
-  setPatientCode("");
+
+  if (!canShowPatientCode) {
+    setPatientCode("");
+  }
+
+  if (stateData?.status === "available") {
+    setBox("");
+  }
 }
 
     // Buscar todos os user_id possíveis para montar o mapa de nomes
@@ -950,7 +961,7 @@ setMsg(
 }
   }
 
-  async function saveSessionData() {
+async function saveSessionData() {
   try {
     await apiPost("/api/session/update", {
       sessionId: currentSession.id,
@@ -959,65 +970,77 @@ setMsg(
     });
 
     setIsEditingSessionData(false);
+
+    setMsg({
+      text: "Dados da sessão atualizados com sucesso.",
+      type: "success",
+    });
+
     await loadData();
   } catch (err) {
     console.error("Erro ao atualizar sessão:", err);
+    setMsg({
+      text: err.message || "Erro ao atualizar sessão.",
+      type: "warning",
+    });
   }
 }
 
   async function uploadPhoto() {
-    setMsg("");
+  try {
+    if (!selectedFile || !cameraState?.camera_id && !CAMERA_ID) return;
 
-    if (!selectedFile) {
-      setMsg("Seleciona uma fotografia primeiro.");
-      return;
-    }
+    setUploadingPhoto(true);
 
-    if (!cameraState?.current_session_id) {
-      setMsg("Não existe sessão ativa para associar a fotografia.");
-      return;
-    }
+    const formData = new FormData();
+    formData.append("photo", selectedFile);
+    formData.append("cameraId", CAMERA_ID);
+    formData.append("phase", photoPhase);
+
+    const {
+      data: { session: activeSession },
+    } = await supabase.auth.getSession();
+
+    const response = await fetch(`${API_BASE_URL}/api/photos/ingest`, {
+      method: "POST",
+      headers: activeSession?.access_token
+        ? {
+            Authorization: `Bearer ${activeSession.access_token}`,
+          }
+        : {},
+      body: formData,
+    });
+
+    const text = await response.text();
+    let data;
 
     try {
-      setUploadingPhoto(true);
-
-      const fileExt = selectedFile.name.split(".").pop();
-      const fileName = `${cameraState.current_session_id}/${Date.now()}-${Math.random()
-        .toString(36)
-        .slice(2)}.${fileExt}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from(PHOTO_BUCKET)
-        .upload(fileName, selectedFile, {
-          upsert: false,
-        });
-
-      if (uploadError) {
-        throw new Error(uploadError.message);
-      }
-
-      const { error: insertError } = await supabase.from("session_photos").insert({
-        session_id: cameraState.current_session_id,
-        camera_id: CAMERA_ID,
-        user_id: currentUserId,
-        phase: photoPhase,
-        storage_path: fileName,
-      });
-
-      if (insertError) {
-        throw new Error(insertError.message);
-      }
-
-      setMsg("Fotografia carregada com sucesso.");
-      setSelectedFile(null);
-      await loadData();
-    } catch (error) {
-      console.error("UPLOAD PHOTO ERROR:", error);
-      setMsg(error.message);
-    } finally {
-      setUploadingPhoto(false);
+      data = JSON.parse(text);
+    } catch {
+      throw new Error("O backend devolveu uma resposta inválida.");
     }
+
+    if (!response.ok) {
+      throw new Error(data.error || "Erro ao carregar fotografia.");
+    }
+
+    setMsg({
+      text: "Fotografia carregada com sucesso.",
+      type: "success",
+    });
+
+    setSelectedFile(null);
+    await loadData();
+  } catch (error) {
+    console.error("UPLOAD PHOTO ERROR:", error);
+    setMsg({
+      text: error.message || "Erro ao carregar fotografia.",
+      type: "warning",
+    });
+  } finally {
+    setUploadingPhoto(false);
   }
+}
 
   async function openPhoto(path) {
     const { data, error } = await supabase.storage
@@ -1524,36 +1547,50 @@ async function confirmStopSession() {
                 gap: 16,
               }}
             >
-              <div style={{ padding: 18, borderRadius: 18, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
-                <div style={{ color: "#7f8b99", marginBottom: 8 }}>Utilizador atual</div>
-                <div style={{ fontWeight: 700, color: "#17324d" }}>
-                  {profilesMap[cameraState?.current_user_id] ||
-                    cameraState?.current_user_id ||
-                    "—"}
+                <div style={{ padding: 18, borderRadius: 18, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
+                  <div style={{ color: "#7f8b99", marginBottom: 8 }}>Utilizador atual</div>
+                  <div style={{ fontWeight: 700, color: "#17324d" }}>
+                    <p>
+                      {cameraState?.status === "available"
+                        ? "—"
+                        : profilesMap[cameraState?.current_user_id] ||
+                        currentSession?.user_name ||
+                        "—"}
+                    </p>
+                  </div>
                 </div>
-              </div>
 
-              <div style={{ padding: 18, borderRadius: 18, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
-                <div style={{ color: "#7f8b99", marginBottom: 8 }}>Box atual</div>
-                <div style={{ fontWeight: 700, color: "#17324d" }}>
-                  <p>{cameraState?.status === "available" ? "—" : cameraState?.current_box || "—"}</p>
+                <div style={{ padding: 18, borderRadius: 18, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
+                  <div style={{ color: "#7f8b99", marginBottom: 8 }}>Box atual</div>
+                  <div style={{ fontWeight: 700, color: "#17324d" }}>
+                    <p>{cameraState?.status === "available" ? "—" : cameraState?.current_box || "—"}</p>
+                  </div>
                 </div>
-              </div>
 
-              <div style={{ padding: 18, borderRadius: 18, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
-                <div style={{ color: "#7f8b99", marginBottom: 8 }}>Sessão atual</div>
-                <div style={{ fontWeight: 700, color: "#17324d", wordBreak: "break-word" }}>
-                  <p>{cameraState?.status === "available" ? "—" : currentSession?.id || "—"}</p>
+                <div style={{ padding: 18, borderRadius: 18, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
+                  <div style={{ color: "#7f8b99", marginBottom: 8 }}>Sessão atual</div>
+                  <div style={{ fontWeight: 700, color: "#17324d", wordBreak: "break-word" }}>
+                    <p>
+                      {cameraState?.status === "in_use" || cameraState?.status === "paused"
+                        ? currentSession?.id || "—"
+                        : "—"}
+                    </p>
+                  </div>
                 </div>
-              </div>
 
-              <div style={{ padding: 18, borderRadius: 18, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
-                <div style={{ color: "#7f8b99", marginBottom: 8 }}>Código do paciente</div>
-                <div style={{ fontWeight: 700, color: "#17324d" }}>
-                  <p>{cameraState?.status === "available" ? "—" : currentSession?.patient_code || "—"}</p>
+                <div style={{ padding: 18, borderRadius: 18, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
+                  <div style={{ color: "#7f8b99", marginBottom: 8 }}>Código do paciente</div>
+                  <div style={{ fontWeight: 700, color: "#17324d" }}>
+                    <p>
+                      {cameraState?.status === "available"
+                        ? "—"
+                        : profilesMap[cameraState?.current_user_id] ||
+                        currentSession?.user_name ||
+                        "—"}
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
           )}
         </div>
         <div
@@ -1697,67 +1734,94 @@ async function confirmStopSession() {
         </div>
 
         <div
-          className="card"
-          style={{
-            padding: 26,
-            background: "linear-gradient(180deg, #ffffff 0%, #fbfcff 100%)",
-          }}
-        >
-          <h2 style={{ marginTop: 0, color: "#1e4a8d", fontSize: "1.7rem" }}>
-            Sessão clínica
-          </h2>
+  style={{
+    background: "#fff",
+    borderRadius: 24,
+    padding: 26,
+    border: "1px solid #e4e9f0",
+  }}
+>
+  <h2 style={{ marginTop: 0, color: "#1e4a8d", fontSize: "1.7rem" }}>
+    Sessão clínica
+  </h2>
 
-          <p style={{ color: "#5f6b7a", marginTop: 8 }}>
-            Preparação da sessão ativa e carregamento de fotografias.
-          </p>
+  <p style={{ color: "#5f6b7a", marginTop: 8 }}>
+    Preparação da sessão ativa e carregamento de fotografias.
+  </p>
 
-          <div>
-  <label
-    style={{
-      display: "block",
-      marginBottom: 8,
-      color: "#5f6b7a",
-      fontWeight: 600,
-    }}
-  >
-    Box
-  </label>
-  <input
-    value={box}
-    onChange={(e) => setBox(e.target.value)}
-    placeholder="Introduza a Box"
-    disabled={!isEditingSessionData && !!currentSession}
-  />
-</div>
+  <div style={{ display: "grid", gap: 16, marginTop: 22 }}>
+    <div>
+      <label
+        style={{
+          display: "block",
+          marginBottom: 8,
+          color: "#5f6b7a",
+          fontWeight: 600,
+        }}
+      >
+        Box
+      </label>
+      <input
+        value={box}
+        onChange={(e) => setBox(e.target.value)}
+        placeholder="Introduza a Box"
+        disabled={!isEditingSessionData && !!currentSession}
+      />
+    </div>
 
-<div>
-  <label
-    style={{
-      display: "block",
-      marginBottom: 8,
-      color: "#5f6b7a",
-      fontWeight: 600,
-    }}
-  >
-    Código do paciente
-  </label>
-  <input
-    autoFocus={!currentSession}
-    value={patientCode}
-    onChange={(e) => setPatientCode(e.target.value)}
-    disabled={!isEditingSessionData && !!currentSession}
-    onKeyDown={(e) => {
-      if (e.key === "Enter") {
-        startSession();
-      }
-    }}
-    placeholder="Introduza o código"
-  />
-</div>
+    <div>
+      <label
+        style={{
+          display: "block",
+          marginBottom: 8,
+          color: "#5f6b7a",
+          fontWeight: 600,
+        }}
+      >
+        Código do paciente
+      </label>
+      <input
+        autoFocus={!currentSession}
+        value={patientCode}
+        onChange={(e) => setPatientCode(e.target.value)}
+        disabled={!isEditingSessionData && !!currentSession}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !currentSession) {
+            startSession();
+          }
+        }}
+        placeholder="Introduza o código"
+      />
+    </div>
+  </div>
 
+  {currentSession && (
+    <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
+      {!isEditingSessionData ? (
+        <button type="button" onClick={() => setIsEditingSessionData(true)}>
+          Editar
+        </button>
+      ) : (
+        <>
+          <button type="button" onClick={saveSessionData}>
+            Guardar
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setIsEditingSessionData(false);
+              setBox(currentSession?.box || "");
+              setPatientCode(currentSession?.patient_code || "");
+            }}
+          >
+            Cancelar
+          </button>
+        </>
+      )}
+    </div>
+  )}
 
-          <div style={{ display: "grid", gap: 16, marginTop: 22 }}>
-  <div>
+  <div style={{ marginTop: 26 }}>
     <label
       style={{
         display: "block",
@@ -1766,70 +1830,38 @@ async function confirmStopSession() {
         fontWeight: 600,
       }}
     >
-      Box
+      Carregar fotografias
     </label>
-    <input
-      value={box}
-      onChange={(e) => setBox(e.target.value)}
-      placeholder="Introduza a Box"
-      disabled={!isEditingSessionData && !!currentSession}
-    />
-  </div>
 
-  <div>
-    <label
-      style={{
-        display: "block",
-        marginBottom: 8,
-        color: "#5f6b7a",
-        fontWeight: 600,
-      }}
+    <select
+      value={photoPhase}
+      onChange={(e) => setPhotoPhase(e.target.value)}
+      disabled={!currentSession || uploadingPhoto}
+      style={{ marginBottom: 12 }}
     >
-      Código do paciente
-    </label>
+      <option value="before">Inicial</option>
+      <option value="during">Durante</option>
+      <option value="after">Final</option>
+    </select>
+
     <input
-      autoFocus={!currentSession}
-      value={patientCode}
-      onChange={(e) => setPatientCode(e.target.value)}
-      disabled={!isEditingSessionData && !!currentSession}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          startSession();
-        }
-      }}
-      placeholder="Introduza o código"
+      type="file"
+      accept="image/*"
+      onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+      disabled={!currentSession || uploadingPhoto}
+      style={{ marginBottom: 12 }}
     />
+
+    <button
+      type="button"
+      disabled={!currentSession || !selectedFile || uploadingPhoto}
+      onClick={uploadPhoto}
+    >
+      {uploadingPhoto ? "A carregar..." : "Carregar fotografia"}
+    </button>
   </div>
 </div>
 
-{currentSession && (
-  <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-    {!isEditingSessionData ? (
-      <button type="button" onClick={() => setIsEditingSessionData(true)}>
-        Editar
-      </button>
-    ) : (
-      <>
-        <button type="button" onClick={saveSessionData}>
-          Guardar
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setIsEditingSessionData(false);
-            setBox(currentSession?.box || "");
-            setPatientCode(currentSession?.patient_code || "");
-          }}
-        >
-          Cancelar
-        </button>
-      </>
-    )}
-  </div>
-)}
-  
-  
-        </div>
       </section>
 
       
