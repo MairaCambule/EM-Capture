@@ -113,6 +113,14 @@ export default function Capture({ session }) {
     currentSession?.user_id === currentUserId &&
     (currentSession?.status === "open" || currentSession?.status === "paused");
 
+  const hasRequiredSessionData =
+    box.trim() !== "" && patientCode.trim() !== "";
+
+  const canStartSessionFinal = canStartSession && hasRequiredSessionData;
+
+  const canSeeSessionClinic =
+  isCurrentUserUsingCamera || isCurrentUserReserved;
+
 
   useEffect(() => {
     if (!session?.access_token) return;
@@ -756,30 +764,20 @@ export default function Capture({ session }) {
   }, [session?.access_token, CAMERA_ID, loadData]);
 
 
-  useEffect(() => {
-    if (!session?.access_token || !CAMERA_ID) return;
+useEffect(() => {
+  if (!session?.access_token || !CAMERA_ID) return;
 
-    const shouldPoll =
-      cameraState?.status === "reserved" ||
-      cameraState?.status === "available" ||
-      queueEntries.some(
-        (entry) => entry.status === "waiting" || entry.status === "notified"
-      );
+  const interval = setInterval(async () => {
+    try {
+      await syncQueueState();
+      await loadData();
+    } catch (error) {
+      console.error("Polling error:", error);
+    }
+  }, 5000);
 
-    if (!shouldPoll) return;
-
-    const interval = setInterval(async () => {
-      try {
-        await syncQueueState();
-        await loadData();
-      } catch (error) {
-        console.error("Polling error:", error);
-      }
-    }, 10000);
-
-    return () => clearInterval(interval);
-  }, [session?.access_token, CAMERA_ID, cameraState, queueEntries, loadData]);
-
+  return () => clearInterval(interval);
+}, [session?.access_token, CAMERA_ID, loadData]);
 
   useEffect(() => {
     async function handleExpiredTurn() {
@@ -820,14 +818,14 @@ export default function Capture({ session }) {
   }, [cameraState, myNotifiedEntry, loadData, expiringTurn]);
 
   useEffect(() => {
-  if (isMyTurn && !isCurrentUserUsingCamera) {
-    setShowTurnModal(true);
+    if (isMyTurn && !isCurrentUserUsingCamera) {
+      setShowTurnModal(true);
 
-    // 🔥 limpar campos para NOVA sessão
-    setBox("");
-    setPatientCode("");
-  }
-}, [isMyTurn, isCurrentUserUsingCamera]);
+      // 🔥 limpar campos para NOVA sessão
+      setBox("");
+      setPatientCode("");
+    }
+  }, [isMyTurn, isCurrentUserUsingCamera]);
 
   useEffect(() => {
     if (!isMyTurn) {
@@ -1361,7 +1359,7 @@ export default function Capture({ session }) {
             </div>
 
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <button className="primary-btn" onClick={startSession} disabled={!patientCode || !box} disabled={!canStartSession} >
+              <button className="primary-btn" onClick={startSession} disabled={!canStartSessionFinal} >
                 Iniciar
               </button>
 
@@ -1749,7 +1747,7 @@ export default function Capture({ session }) {
   </div>
   */}
         </div>
-
+{canSeeSessionClinic && (
         <div
           style={{
             background: "#fff",
@@ -1778,12 +1776,12 @@ export default function Capture({ session }) {
               >
                 Box
               </label>
-<input
-  value={box}
-  onChange={(e) => setBox(e.target.value)}
-  placeholder="Introduza a Box"
-  disabled={!!currentSession && !isEditingSessionData}
-/>
+              <input
+                value={box}
+                onChange={(e) => setBox(e.target.value)}
+                placeholder="Introduza a Box"
+                disabled={!!currentSession && !isEditingSessionData}
+              />
             </div>
 
             <div>
@@ -1797,18 +1795,18 @@ export default function Capture({ session }) {
               >
                 Código do paciente
               </label>
-           <input
-  autoFocus={!currentSession}
-  value={patientCode}
-  onChange={(e) => setPatientCode(e.target.value)}
-  placeholder="Introduza o código"
-  disabled={!!currentSession && !isEditingSessionData}
-  onKeyDown={(e) => {
-    if (e.key === "Enter" && canStartSession) {
-      startSession();
-    }
-  }}
-/>
+              <input
+                autoFocus={!currentSession}
+                value={patientCode}
+                onChange={(e) => setPatientCode(e.target.value)}
+                placeholder="Introduza o código"
+                disabled={!!currentSession && !isEditingSessionData}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && canStartSessionFinal) {
+                    startSession();
+                  }
+                }}
+              />
             </div>
           </div>
 
@@ -1878,6 +1876,7 @@ export default function Capture({ session }) {
             </button>
           </div>
         </div>
+)}
 
       </section>
 
