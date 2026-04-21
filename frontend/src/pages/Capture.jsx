@@ -405,21 +405,21 @@ export default function Capture({ session }) {
   const isModuleAdmin = moduleRole === "module_admin";
   const canViewAllRecords = isGlobalAdmin || isModuleAdmin;
 
-  const canStartSession =
+  /*const canStartSession =
     cameraState?.status === "reserved" &&
     cameraState?.current_user_id === currentUserId &&
     myNotifiedEntry &&
     new Date(myNotifiedEntry.expires_at) > new Date();
-
+*/
   const canPauseOrStop =
     cameraState?.status === "in_use" &&
     cameraState?.current_user_id === currentUserId &&
     !!cameraState?.current_session_id;
 
-  const isCurrentUserUsingCamera =
+  /*const isCurrentUserUsingCamera =
     cameraState?.status === "in_use" &&
     cameraState?.current_user_id === currentUserId;
-
+*/
   console.log("session:", session);
   console.log("access token exists:", !!session?.access_token);
   console.log("API_BASE_URL:", API_BASE_URL);
