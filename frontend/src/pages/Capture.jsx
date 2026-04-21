@@ -174,12 +174,19 @@ useEffect(() => {
   setBox("");
   setPatientCode("");
 } else if (stateData?.current_session_id) {
-  const { data: sessionData, error: sessionError } = await supabase
+  const { data: sessionsData, error } = await supabase
+  .from("clinical_sessions")
+  .select("*")
+  .eq("user_id", currentUserId)
+  .eq("is_archived", false) // 👈 ESTA LINHA
+  .order("started_at", { ascending: false });
+  
+  /*const { data: sessionData, error: sessionError } = await supabase
     .from("clinical_sessions")
     .select("*")
     .eq("id", stateData.current_session_id)
     .maybeSingle();
-
+*/
   if (!sessionError) {
     setCurrentSession(sessionData || null);
   } else {
