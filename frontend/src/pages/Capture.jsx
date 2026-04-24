@@ -85,6 +85,8 @@ export default function Capture({ session }) {
 
   const isGlobalAdmin = profile?.role === "global_admin";
 
+  const isModuleAdmin = moduleRole === "module_admin";
+  const canViewAllRecords = isGlobalAdmin || isModuleAdmin;
 
   const baseRecords =
   recordsView === "all" && canViewAllRecords ? allRecords : myRecords;
@@ -458,8 +460,7 @@ const canStartSessionFinal = canStartSession && hasRequiredSessionData;
     return new Date(myNotifiedEntry.expires_at) > new Date();
   }, [cameraState, currentUserId, myNotifiedEntry]);
 
-  const isModuleAdmin = moduleRole === "module_admin";
-  const canViewAllRecords = isGlobalAdmin || isModuleAdmin;
+
 
   /*const canStartSession =
     cameraState?.status === "reserved" &&
@@ -2183,28 +2184,31 @@ async function startSession() {
                     </td>
                     <td>
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        {record.is_archived && (
+                          <div style={{ color: "#b45309", fontWeight: 600 }}>
+                            Arquivado
+                            {record.archived_at
+                              ? ` em ${new Date(record.archived_at).toLocaleString()}`
+                              : ""}
+                            {record.archived_by_user_id
+                              ? ` por ${profilesMap[record.archived_by_user_id] || record.archived_by_user_id}`
+                              : ""}
+                          </div>
+                        )}
+
                         {!record.is_archived && (
-                          <button
-                            type="button"
-                            onClick={() => archiveRecord(record.id)}
-                          >
+                          <button type="button" onClick={() => archiveRecord(record.id)}>
                             Arquivar
                           </button>
                         )}
 
                         {record.is_archived && canViewAllRecords && (
                           <>
-                            <button
-                              type="button"
-                              onClick={() => restoreRecord(record.id)}
-                            >
+                            <button type="button" onClick={() => restoreRecord(record.id)}>
                               Restaurar
                             </button>
 
-                            <button
-                              type="button"
-                              onClick={() => deleteRecordPermanently(record.id)}
-                            >
+                            <button type="button" onClick={() => deleteRecordPermanently(record.id)}>
                               Eliminar definitivo
                             </button>
                           </>
