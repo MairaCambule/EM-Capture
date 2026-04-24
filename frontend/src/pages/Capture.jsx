@@ -83,6 +83,9 @@ export default function Capture({ session }) {
   const [recordsView, setRecordsView] = useState("mine");
   const [allRecords, setAllRecords] = useState([]);
 
+  const isGlobalAdmin = profile?.role === "global_admin";
+
+
   const baseRecords =
   recordsView === "all" && canViewAllRecords ? allRecords : myRecords;
 
@@ -455,7 +458,6 @@ const canStartSessionFinal = canStartSession && hasRequiredSessionData;
     return new Date(myNotifiedEntry.expires_at) > new Date();
   }, [cameraState, currentUserId, myNotifiedEntry]);
 
-  const isGlobalAdmin = profile?.role === "global_admin";
   const isModuleAdmin = moduleRole === "module_admin";
   const canViewAllRecords = isGlobalAdmin || isModuleAdmin;
 
@@ -2180,59 +2182,35 @@ async function startSession() {
                       </button>
                     </td>
                     <td>
-  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-   <td>
-  {record.is_archived && (
-    <div style={{ marginBottom: 8, color: "#b45309", fontWeight: 600 }}>
-      Arquivado
-      {record.archived_at
-        ? ` em ${new Date(record.archived_at).toLocaleString()}`
-        : ""}
-      {record.archived_by_user_id
-        ? ` por ${profilesMap[record.archived_by_user_id] || record.archived_by_user_id}`
-        : ""}
-    </div>
-  )}
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        {!record.is_archived && (
+                          <button
+                            type="button"
+                            onClick={() => archiveRecord(record.id)}
+                          >
+                            Arquivar
+                          </button>
+                        )}
 
-  {!record.is_archived && (
-    <button type="button" onClick={() => archiveRecord(record.id)}>
-      Arquivar
-    </button>
-  )}
+                        {record.is_archived && canViewAllRecords && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => restoreRecord(record.id)}
+                            >
+                              Restaurar
+                            </button>
 
-  {record.is_archived && canViewAllRecords && (
-  <>
-    <button type="button" onClick={() => restoreRecord(record.id)}>
-      Restaurar
-    </button>
-
-    <button type="button" onClick={() => deleteRecordPermanently(record.id)}>
-      Eliminar definitivo
-    </button>
-  </>
-)}
-</td>
-
-    {record.is_archived && canViewAllRecords && (
-      <>
-        <button
-          type="button"
-          onClick={() => restoreRecord(record.id)}
-        >
-          Restaurar
-        </button>
-
-        <button
-          type="button"
-          onClick={() => deleteRecordPermanently(record.id)}
-        >
-          Eliminar definitivo
-        </button>
-      </>
-    )}
-  </div>
-</td>
-                
+                            <button
+                              type="button"
+                              onClick={() => deleteRecordPermanently(record.id)}
+                            >
+                              Eliminar definitivo
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
