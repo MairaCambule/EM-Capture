@@ -308,12 +308,6 @@ const canStartSessionFinal = canStartSession && hasRequiredSessionData;
         .select("*")
         .eq("user_id", currentUserId)
         .order("started_at", { ascending: false });
-      // Meus registos
-      const { data: sessionsData, error: sessionsError } = await supabase
-        .from("clinical_sessions")
-        .select("*")
-        .eq("user_id", currentUserId)
-        .order("started_at", { ascending: false });
 
       const archivedByIds = [...new Set(
         (sessionsData || [])
