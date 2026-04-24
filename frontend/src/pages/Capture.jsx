@@ -308,6 +308,37 @@ const canStartSessionFinal = canStartSession && hasRequiredSessionData;
         .select("*")
         .eq("user_id", currentUserId)
         .order("started_at", { ascending: false });
+      // Meus registos
+      const { data: sessionsData, error: sessionsError } = await supabase
+        .from("clinical_sessions")
+        .select("*")
+        .eq("user_id", currentUserId)
+        .order("started_at", { ascending: false });
+
+      const archivedByIds = [...new Set(
+        (sessionsData || [])
+          .map((s) => s.archived_by_user_id)
+          .filter(Boolean)
+      )];
+
+      if (archivedByIds.length > 0) {
+        const { data: archivedProfiles, error: archivedProfilesError } = await supabase
+          .from("profiles")
+          .select("id, full_name")
+          .in("id", archivedByIds);
+
+        if (archivedProfilesError) {
+          console.error("Erro ao carregar archived_by profiles:", archivedProfilesError);
+        } else {
+          (archivedProfiles || []).forEach((p) => {
+            localProfilesMap[p.id] = p.full_name || p.id;
+            //profilesMap[record.archived_by_user_id];
+          });
+
+          setProfilesMap({ ...localProfilesMap });
+          //profilesMap[record.archived_by_user_id]
+        }
+      }
 
       if (sessionsError) {
         console.error("Erro ao carregar meus registos:", sessionsError);
