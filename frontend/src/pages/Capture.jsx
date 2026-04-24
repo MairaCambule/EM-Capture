@@ -2199,6 +2199,18 @@ async function startSession() {
       Arquivar
     </button>
   )}
+
+  {record.is_archived && canViewAllRecords && (
+  <>
+    <button type="button" onClick={() => restoreRecord(record.id)}>
+      Restaurar
+    </button>
+
+    <button type="button" onClick={() => deleteRecordPermanently(record.id)}>
+      Eliminar definitivo
+    </button>
+  </>
+)}
 </td>
 
     {record.is_archived && canViewAllRecords && (
