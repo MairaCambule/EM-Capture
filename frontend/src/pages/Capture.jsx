@@ -2140,17 +2140,6 @@ async function startSession() {
             />
           </div>
         </div>
-        {record.is_archived && (
-  <div style={{ marginTop: 8, color: "#b45309", fontWeight: 600 }}>
-    Arquivado
-    {record.archived_at
-      ? ` em ${new Date(record.archived_at).toLocaleString()}`
-      : ""}
-    {record.archived_by_user_id
-      ? ` por ${profilesMap[record.archived_by_user_id] || record.archived_by_user_id}`
-      : ""}
-  </div>
-)}
 
         {filteredRecords.length === 0 ? (
           <p style={{ color: "#5f6b7a" }}>Ainda não existem registos para mostrar.</p>
@@ -2192,14 +2181,25 @@ async function startSession() {
                     </td>
                     <td>
   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-    {!record.is_archived && (
-      <button
-        type="button"
-        onClick={() => archiveRecord(record.id)}
-      >
-        Arquivar
-      </button>
-    )}
+   <td>
+  {record.is_archived && (
+    <div style={{ marginBottom: 8, color: "#b45309", fontWeight: 600 }}>
+      Arquivado
+      {record.archived_at
+        ? ` em ${new Date(record.archived_at).toLocaleString()}`
+        : ""}
+      {record.archived_by_user_id
+        ? ` por ${profilesMap[record.archived_by_user_id] || record.archived_by_user_id}`
+        : ""}
+    </div>
+  )}
+
+  {!record.is_archived && (
+    <button type="button" onClick={() => archiveRecord(record.id)}>
+      Arquivar
+    </button>
+  )}
+</td>
 
     {record.is_archived && canViewAllRecords && (
       <>
