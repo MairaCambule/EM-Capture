@@ -34,12 +34,15 @@ export default function Capture({ session }) {
   const [selectedTeacherId, setSelectedTeacherId] = useState("");
   const [sessionTeachers, setSessionTeachers] = useState([]);
   const [loadingTeachers, setLoadingTeachers] = useState(false);
+  const [loadingId, setLoadingId] = useState(null);
 
   const [currentPhase, setCurrentPhase] = useState("during");
 
   const [showStopConfirmModal, setShowStopConfirmModal] = useState(false);
 
   const [isEditingSessionData, setIsEditingSessionData] = useState(false);
+
+  const [recordActionLoadingId, setRecordActionLoadingId] = useState(null);
 
   const API_BASE_URL = import.meta.env.VITE_API_URL;
 
@@ -1214,6 +1217,8 @@ async function restoreRecord(sessionId) {
   if (!confirmAction) return;
 
   try {
+    setRecordActionLoadingId(sessionId);
+
     const data = await apiPost("/api/session/restore", { sessionId });
 
     if (data?.restored) {
@@ -1228,11 +1233,12 @@ async function restoreRecord(sessionId) {
     }
   } catch (error) {
     console.error("RESTORE RECORD ERROR:", error);
-
     setMsg({
       text: error.message || "Erro ao restaurar registo.",
       type: "warning",
     });
+  } finally {
+    setRecordActionLoadingId(null);
   }
 }
 
@@ -1244,6 +1250,8 @@ async function deleteRecordPermanently(sessionId) {
   if (!confirmAction) return;
 
   try {
+    setRecordActionLoadingId(sessionId);
+
     const data = await apiPost("/api/session/delete-permanently", {
       sessionId,
     });
@@ -1264,11 +1272,12 @@ async function deleteRecordPermanently(sessionId) {
     }
   } catch (error) {
     console.error("DELETE RECORD ERROR:", error);
-
     setMsg({
       text: error.message || "Erro ao eliminar registo.",
       type: "warning",
     });
+  } finally {
+    setRecordActionLoadingId(null);
   }
 }
 
@@ -2215,19 +2224,32 @@ async function deleteRecordPermanently(sessionId) {
                         )}
 
                         {!record.is_archived && (
-                          <button type="button" onClick={() => archiveRecord(record.id)}>
-                            Arquivar
+                          <button
+                            type="button"
+                            disabled={recordActionLoadingId === record.id}
+                            onClick={() => archiveRecord(record.id)}
+                          >
+                            {recordActionLoadingId === record.id ? "A arquivar..." : "Arquivar"}
                           </button>
                         )}
 
                         {record.is_archived && canViewAllRecords && (
                           <>
-                            <button type="button" onClick={() => restoreRecord(record.id)}>
-                              Restaurar
+                            <button
+                              type="button"
+                              disabled={recordActionLoadingId === record.id}
+                              onClick={() => restoreRecord(record.id)}
+                            >
+                              {recordActionLoadingId === record.id ? "A restaurar..." : "Restaurar"}
                             </button>
-
-                            <button type="button" onClick={() => deleteRecordPermanently(record.id)}>
-                              Eliminar definitivo
+                            <button
+                              type="button"
+                              disabled={recordActionLoadingId === record.id}
+                              onClick={() => deleteRecordPermanently(record.id)}
+                            >
+                              {recordActionLoadingId === record.id
+                                ? "A eliminar..."
+                                : "Eliminar definitivo"}
                             </button>
                           </>
                         )}
