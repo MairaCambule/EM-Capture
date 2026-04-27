@@ -1207,52 +1207,70 @@ async function startSession() {
     }
   }
 
-  async function restoreRecord(sessionId) {
-    try {
-      const data = await apiPost("/api/session/restore", { sessionId });
+async function restoreRecord(sessionId) {
+  const confirmAction = window.confirm(
+    "Tens a certeza que queres restaurar este registo?"
+  );
+  if (!confirmAction) return;
 
-      if (data.restored) {
-        setMsg({
-          text: "Registo restaurado com sucesso.",
-          type: "success",
-        });
+  try {
+    const data = await apiPost("/api/session/restore", { sessionId });
 
-        await loadData();
-      }
-    } catch (error) {
-      console.error("RESTORE RECORD ERROR:", error);
+    if (data?.restored) {
       setMsg({
-        text: error.message,
-        type: "warning",
+        text: "Registo restaurado com sucesso.",
+        type: "success",
       });
+
+      await loadData();
+    } else {
+      throw new Error(data?.error || "Erro ao restaurar registo.");
     }
+  } catch (error) {
+    console.error("RESTORE RECORD ERROR:", error);
+
+    setMsg({
+      text: error.message || "Erro ao restaurar registo.",
+      type: "warning",
+    });
   }
+}
 
-  async function deleteRecordPermanently(sessionId) {
-    try {
-      const data = await apiPost("/api/session/delete-permanently", { sessionId });
 
-      if (data.deleted) {
-        setMsg({
-          text: "Registo eliminado definitivamente.",
-          type: "success",
-        });
+async function deleteRecordPermanently(sessionId) {
+  const confirmAction = window.confirm(
+    "⚠️ Esta ação é irreversível.\n\nQueres eliminar este registo definitivamente?"
+  );
+  if (!confirmAction) return;
 
-        await loadData();
-        if (selectedRecord?.id === sessionId) {
-          closeRecordModal();
-        }
-      }
-    } catch (error) {
-      console.error("DELETE RECORD ERROR:", error);
+  try {
+    const data = await apiPost("/api/session/delete-permanently", {
+      sessionId,
+    });
+
+    if (data?.deleted) {
       setMsg({
-        text: error.message,
-        type: "warning",
+        text: "Registo eliminado definitivamente.",
+        type: "success",
       });
+
+      await loadData();
+
+      if (selectedRecord?.id === sessionId) {
+        closeRecordModal();
+      }
+    } else {
+      throw new Error(data?.error || "Erro ao eliminar registo.");
     }
+  } catch (error) {
+    console.error("DELETE RECORD ERROR:", error);
+
+    setMsg({
+      text: error.message || "Erro ao eliminar registo.",
+      type: "warning",
+    });
   }
-
-
+}
 
   function closeRecordModal() {
     setIsRecordModalOpen(false);

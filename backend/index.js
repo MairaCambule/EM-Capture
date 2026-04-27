@@ -51,6 +51,32 @@ function getAuthedSupabase(req) {
   });
 }
 
+async function canAdminEmCapture(userId) {
+  const { data: profileData } = await supabaseAdmin
+    .from("profiles")
+    .select("role")
+    .eq("id", userId)
+    .single();
+
+  if (profileData?.role === "global_admin") return true;
+
+  const { data: moduleAccess } = await supabaseAdmin
+    .from("user_module_access")
+    .select(`
+      role,
+      platform_modules (
+        code
+      )
+    `)
+    .eq("user_id", userId);
+
+  return (moduleAccess || []).some(
+    (item) =>
+      item.role === "module_admin" &&
+      item.platform_modules?.code === "em_capture"
+  );
+}
+
 async function requireAuth(req, res, next) {
   try {
     const authHeader = req.headers.authorization || "";
