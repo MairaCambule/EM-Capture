@@ -961,9 +961,12 @@ app.post("/api/session/restore", requireAuth, async (req, res) => {
     if (profileError) {
       return res.status(400).json({ error: profileError.message });
     }
+    const isAdmin = await canAdminEmCapture(userId);
 
-    if (profileData?.role !== "global_admin") {
-      return res.status(403).json({ error: "Só admins podem restaurar registos." });
+    if (!isAdmin) {
+      return res.status(403).json({
+        error: "Só admins podem restaurar registos.",
+      });
     }
 
     const { error: restoreError } = await supabaseAdmin
@@ -1005,10 +1008,13 @@ app.post("/api/session/delete-permanently", requireAuth, async (req, res) => {
       return res.status(400).json({ error: profileError.message });
     }
 
-    if (profileData?.role !== "global_admin") {
-      return res.status(403).json({ error: "Só admins podem eliminar definitivamente." });
-    }
+    const isAdmin = await canAdminEmCapture(userId);
 
+    if (!isAdmin) {
+      return res.status(403).json({
+        error: "Só admins podem eliminar registos definitivamente.",
+      });
+    }
     const { error: deletePhotosError } = await supabaseAdmin
       .from("session_photos")
       .delete()
