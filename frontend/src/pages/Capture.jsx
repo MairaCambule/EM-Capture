@@ -41,13 +41,13 @@ export default function Capture({ session }) {
 
   const [currentPhase, setCurrentPhase] = useState("during");
   const [confirmModal, setConfirmModal] = useState({
-  open: false,
-  title: "",
-  message: "",
-  confirmText: "",
-  action: null,
-  type: "default",
-});
+    open: false,
+    title: "",
+    message: "",
+    confirmText: "",
+    action: null,
+    type: "default",
+  });
 
 
   const [showStopConfirmModal, setShowStopConfirmModal] = useState(false);
@@ -98,30 +98,30 @@ export default function Capture({ session }) {
   const [recordsView, setRecordsView] = useState("mine");
   const [allRecords, setAllRecords] = useState([]);
 
-const isGlobalAdmin = profile?.role === "global_admin";
+  const isGlobalAdmin = profile?.role === "global_admin";
 
   const isModuleAdmin = moduleRole === "module_admin";
   const canViewAllRecords = isGlobalAdmin || isModuleAdmin;
 
 
-const isTeacher =
-  (profile?.role || "").trim().toLowerCase() === "teacher";
+  const isTeacher =
+    (profile?.role || "").trim().toLowerCase() === "teacher";
 
-const baseRecords =
-  isTeacher
-    ? teacherRecords
-    : recordsView === "all" && canViewAllRecords
-    ? allRecords
-    : myRecords;
+  const baseRecords =
+    isTeacher
+      ? teacherRecords
+      : recordsView === "all" && canViewAllRecords
+        ? allRecords
+        : myRecords;
 
-    
-const filteredRecordsByArchive = baseRecords.filter((record) => {
-  if (recordsFilterMode === "active") return !record.is_archived;
-  if (recordsFilterMode === "archived") return !!record.is_archived;
-  return true;
-});
 
- 
+  const filteredRecordsByArchive = baseRecords.filter((record) => {
+    if (recordsFilterMode === "active") return !record.is_archived;
+    if (recordsFilterMode === "archived") return !!record.is_archived;
+    return true;
+  });
+
+
 
   const [pendingResumeRecord, setPendingResumeRecord] = useState(null);
 
@@ -158,17 +158,17 @@ const filteredRecordsByArchive = baseRecords.filter((record) => {
     currentSession?.user_id === currentUserId &&
     (currentSession?.status === "open" || currentSession?.status === "paused");
 
-const hasRequiredSessionData =
-  draftBox.trim() !== "" && draftPatientCode.trim() !== "";
+  const hasRequiredSessionData =
+    draftBox.trim() !== "" && draftPatientCode.trim() !== "";
 
-const canStartSessionFinal = canStartSession && hasRequiredSessionData;
+  const canStartSessionFinal = canStartSession && hasRequiredSessionData;
 
   const canSeeSessionClinic =
     isCurrentUserUsingCamera || isCurrentUserReserved;
 
   const [isPreparingSession, setIsPreparingSession] = useState(false);
 
-  
+
 
 
   useEffect(() => {
@@ -180,315 +180,325 @@ const canStartSessionFinal = canStartSession && hasRequiredSessionData;
   }, [session?.access_token]);
 
 
-const loadData = useCallback(async () => {
-  try {
-    setLoading(true);
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true);
 
-    await syncQueueState();
+      await syncQueueState();
 
-    const { data: stateData, error: stateError } = await supabase
-      .from("camera_state")
-      .select("*")
-      .eq("camera_id", CAMERA_ID)
-      .single();
+      const { data: stateData, error: stateError } = await supabase
+        .from("camera_state")
+        .select("*")
+        .eq("camera_id", CAMERA_ID)
+        .single();
 
-    if (stateError) {
-      console.error("Erro ao carregar camera_state:", stateError);
-      return;
-    }
+      if (stateError) {
+        console.error("Erro ao carregar camera_state:", stateError);
+        return;
+      }
 
-    setCameraState(stateData);
+      setCameraState(stateData);
 
-    if (stateData?.status === "available") {
-      setCurrentSession(null);
-      setBox("");
-      setPatientCode("");
-    }
+      if (stateData?.status === "available") {
+        setCurrentSession(null);
+        setBox("");
+        setPatientCode("");
+      }
 
-    setCurrentPhase(stateData?.current_phase || "during");
+      setCurrentPhase(stateData?.current_phase || "during");
 
-    const { data: queueData, error: queueError } = await supabase
-      .from("queue_entries")
-      .select("*")
-      .eq("camera_id", CAMERA_ID)
-      .in("status", ["waiting", "notified"])
-      .order("joined_at", { ascending: true });
+      const { data: queueData, error: queueError } = await supabase
+        .from("queue_entries")
+        .select("*")
+        .eq("camera_id", CAMERA_ID)
+        .in("status", ["waiting", "notified"])
+        .order("joined_at", { ascending: true });
 
-    if (queueError) {
-      console.error("Erro ao carregar fila:", queueError);
-    }
+      if (queueError) {
+        console.error("Erro ao carregar fila:", queueError);
+      }
 
-    const safeQueue = queueData || [];
-    setQueueEntries(safeQueue);
+      const safeQueue = queueData || [];
+      setQueueEntries(safeQueue);
 
-    // Perfil do utilizador atual
-    const { data: profileData, error: profileError } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", currentUserId)
-      .single();
+      // Perfil do utilizador atual
+      const { data: profileData, error: profileError } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", currentUserId)
+        .single();
 
-    let loadedProfileRole = "user";
-    let isTeacher = false;
-    let isGlobalAdmin = false;
+      let loadedProfileRole = "user";
+      let isTeacher = false;
+      let isGlobalAdmin = false;
 
-    if (profileError) {
-      console.error("Erro ao carregar profile:", profileError);
-      setProfile(null);
-    } else {
-      setProfile(profileData);
+      if (profileError) {
+        console.error("Erro ao carregar profile:", profileError);
+        setProfile(null);
+      } else {
+        setProfile(profileData);
 
-     const loadedProfileRole = (profileData?.role || "user").trim().toLowerCase();
-     const isTeacher = loadedProfileRole === "teacher";
-      const isGlobalAdmin = loadedProfileRole === "global_admin";
+        loadedProfileRole = (profileData?.role || "user").trim().toLowerCase();
+        isTeacher = loadedProfileRole === "teacher";
+        isGlobalAdmin = loadedProfileRole === "global_admin";
 
-      console.log("ROLE CARREGADA:", loadedProfileRole);
-      console.log("IS TEACHER:", isTeacher);
-      console.log("IS GLOBAL ADMIN:", isGlobalAdmin);
+        console.log("ROLE CARREGADA:", loadedProfileRole);
+        console.log("IS TEACHER:", isTeacher);
+        console.log("IS GLOBAL ADMIN:", isGlobalAdmin);
 
-      if (isTeacher) {
-        try {
-          console.log("A chamar teacher records direto...");
+        if (isTeacher) {
+          try {
+            console.log("A chamar teacher records direto...");
 
-          const {
-            data: { session: activeSession },
-          } = await supabase.auth.getSession();
+            const {
+              data: { session: activeSession },
+            } = await supabase.auth.getSession();
 
-          const response = await axios.get(`${API_BASE_URL}/api/teacher/records`, {
-            headers: {
-              Authorization: `Bearer ${activeSession?.access_token}`,
-            },
-          });
+            const response = await axios.get(`${API_BASE_URL}/api/teacher/records`, {
+              headers: {
+                Authorization: `Bearer ${activeSession?.access_token}`,
+              },
+            });
 
-          console.log("RESPONSE COMPLETA:", response);
-          console.log("RESPONSE DATA:", response.data);
+            console.log("RESPONSE COMPLETA:", response);
+            console.log("RESPONSE DATA:", response.data);
 
-          setTeacherRecords(response.data?.records || []);
-        } catch (error) {
-          console.error("Erro ao carregar registos do professor:", error);
+            const records =
+              response.data?.records ||
+              response.data?.data ||
+              response.data?.result?.records ||
+              response.data?.result ||
+              [];
+
+            console.log("TEACHER RECORDS NORMALIZADOS:", records);
+
+            setTeacherRecords(Array.isArray(records) ? records : []);
+
+          } catch (error) {
+            console.error("Erro ao carregar registos do professor:", error);
+            setTeacherRecords([]);
+          }
+        } else {
           setTeacherRecords([]);
         }
-      } else {
-        setTeacherRecords([]);
       }
-    }
 
-    const { data: moduleData, error: moduleError } = await supabase
-      .from("user_module_access")
-      .select(`
+      const { data: moduleData, error: moduleError } = await supabase
+        .from("user_module_access")
+        .select(`
         role,
         platform_modules (
           code
         )
       `)
-      .eq("user_id", currentUserId);
+        .eq("user_id", currentUserId);
 
-    let currentModuleRole = "user";
+      let currentModuleRole = "user";
 
-    if (moduleError) {
-      console.error("Erro ao carregar role do módulo:", moduleError);
-    } else {
-      currentModuleRole =
-        (moduleData || []).find(
-          (item) => item.platform_modules?.code === "em_capture"
-        )?.role || "user";
+      if (moduleError) {
+        console.error("Erro ao carregar role do módulo:", moduleError);
+      } else {
+        currentModuleRole =
+          (moduleData || []).find(
+            (item) => item.platform_modules?.code === "em_capture"
+          )?.role || "user";
 
-      setModuleRole(currentModuleRole);
-    }
+        setModuleRole(currentModuleRole);
+      }
 
-    if (stateData?.status === "in_use" && stateData?.current_session_id) {
-      const { data, error } = await supabase
-        .from("clinical_sessions")
-        .select("*")
-        .eq("id", stateData.current_session_id)
-        .maybeSingle();
+      if (stateData?.status === "in_use" && stateData?.current_session_id) {
+        const { data, error } = await supabase
+          .from("clinical_sessions")
+          .select("*")
+          .eq("id", stateData.current_session_id)
+          .maybeSingle();
 
-      if (error) {
-        console.error("Erro ao buscar sessão:", error);
+        if (error) {
+          console.error("Erro ao buscar sessão:", error);
+          setCurrentSession(null);
+          setBox("");
+          setPatientCode("");
+        } else {
+          setCurrentSession(data || null);
+          setBox(data?.box || "");
+          setPatientCode(data?.patient_code || "");
+        }
+      } else {
         setCurrentSession(null);
         setBox("");
         setPatientCode("");
-      } else {
-        setCurrentSession(data || null);
-        setBox(data?.box || "");
-        setPatientCode(data?.patient_code || "");
       }
-    } else {
-      setCurrentSession(null);
-      setBox("");
-      setPatientCode("");
-    }
 
-    // Buscar todos os user_id possíveis para montar o mapa de nomes
-    const { data: allSessionsForNames, error: allSessionsForNamesError } =
-      await supabase.from("clinical_sessions").select("user_id");
+      // Buscar todos os user_id possíveis para montar o mapa de nomes
+      const { data: allSessionsForNames, error: allSessionsForNamesError } =
+        await supabase.from("clinical_sessions").select("user_id");
 
-    if (allSessionsForNamesError) {
-      console.error(
-        "Erro ao carregar user_ids de clinical_sessions:",
-        allSessionsForNamesError
-      );
-    }
-
-    const ids = [
-      ...new Set(
-        [
-          ...safeQueue.map((q) => q.user_id),
-          ...(allSessionsForNames || []).map((s) => s.user_id),
-          stateData?.current_user_id,
-          currentUserId,
-        ].filter(Boolean)
-      ),
-    ];
-
-    let localProfilesMap = {};
-
-    if (ids.length > 0) {
-      const { data: profilesData, error: profilesError } = await supabase
-        .from("profiles")
-        .select("id, full_name")
-        .in("id", ids);
-
-      if (profilesError) {
-        console.error("Erro ao carregar profiles:", profilesError);
-      } else {
-        (profilesData || []).forEach((p) => {
-          localProfilesMap[p.id] = p.full_name || p.id;
-        });
-
-        setProfilesMap(localProfilesMap);
+      if (allSessionsForNamesError) {
+        console.error(
+          "Erro ao carregar user_ids de clinical_sessions:",
+          allSessionsForNamesError
+        );
       }
-    } else {
-      setProfilesMap({});
-    }
 
-    // Meus registos
-    const { data: sessionsData, error: sessionsError } = await supabase
-      .from("clinical_sessions")
-      .select("*")
-      .eq("user_id", currentUserId)
-      .order("started_at", { ascending: false });
+      const ids = [
+        ...new Set(
+          [
+            ...safeQueue.map((q) => q.user_id),
+            ...(allSessionsForNames || []).map((s) => s.user_id),
+            stateData?.current_user_id,
+            currentUserId,
+          ].filter(Boolean)
+        ),
+      ];
 
-    const archivedByIds = [
-      ...new Set(
-        (sessionsData || [])
-          .map((s) => s.archived_by_user_id)
-          .filter(Boolean)
-      ),
-    ];
+      let localProfilesMap = {};
 
-    if (archivedByIds.length > 0) {
-      const { data: archivedProfiles, error: archivedProfilesError } =
-        await supabase
+      if (ids.length > 0) {
+        const { data: profilesData, error: profilesError } = await supabase
           .from("profiles")
           .select("id, full_name")
-          .in("id", archivedByIds);
+          .in("id", ids);
 
-      if (archivedProfilesError) {
-        console.error(
-          "Erro ao carregar archived_by profiles:",
-          archivedProfilesError
-        );
-      } else {
-        (archivedProfiles || []).forEach((p) => {
-          localProfilesMap[p.id] = p.full_name || p.id;
-        });
-
-        setProfilesMap({ ...localProfilesMap });
-      }
-    }
-
-    if (sessionsError) {
-      console.error("Erro ao carregar meus registos:", sessionsError);
-      setMyRecords([]);
-    } else {
-      const sessions = sessionsData || [];
-
-      if (sessions.length === 0) {
-        setMyRecords([]);
-      } else {
-        const sessionIds = sessions.map((s) => s.id);
-
-        const { data: photosData, error: photosError } = await supabase
-          .from("session_photos")
-          .select("session_id, id")
-          .in("session_id", sessionIds);
-
-        if (photosError) {
-          console.error("Erro ao carregar contagem de fotos:", photosError);
-        }
-
-        const photoCountMap = {};
-        (photosData || []).forEach((photo) => {
-          photoCountMap[photo.session_id] =
-            (photoCountMap[photo.session_id] || 0) + 1;
-        });
-
-        const records = sessions.map((sessionItem) => ({
-          ...sessionItem,
-          user_name: localProfilesMap[sessionItem.user_id] || sessionItem.user_id,
-          photos_count: photoCountMap[sessionItem.id] || 0,
-        }));
-
-        setMyRecords(records);
-      }
-    }
-
-    // Todos os registos apenas para admins
-    if (isGlobalAdmin || currentModuleRole === "module_admin") {
-      const { data: allSessionsData, error: allSessionsError } = await supabase
-        .from("clinical_sessions")
-        .select("*")
-        .order("started_at", { ascending: false });
-
-      if (allSessionsError) {
-        console.error("Erro ao carregar todos os registos:", allSessionsError);
-        setAllRecords([]);
-      } else {
-        const allSessions = allSessionsData || [];
-
-        if (allSessions.length === 0) {
-          setAllRecords([]);
+        if (profilesError) {
+          console.error("Erro ao carregar profiles:", profilesError);
         } else {
-          const allSessionIds = allSessions.map((s) => s.id);
-
-          const { data: allPhotosData, error: allPhotosError } = await supabase
-            .from("session_photos")
-            .select("session_id, id")
-            .in("session_id", allSessionIds);
-
-          if (allPhotosError) {
-            console.error(
-              "Erro ao carregar contagem global de fotos:",
-              allPhotosError
-            );
-          }
-
-          const allPhotoCountMap = {};
-          (allPhotosData || []).forEach((photo) => {
-            allPhotoCountMap[photo.session_id] =
-              (allPhotoCountMap[photo.session_id] || 0) + 1;
+          (profilesData || []).forEach((p) => {
+            localProfilesMap[p.id] = p.full_name || p.id;
           });
 
-          const allRecordsMapped = allSessions.map((sessionItem) => ({
-            ...sessionItem,
-            user_name:
-              localProfilesMap[sessionItem.user_id] || sessionItem.user_id,
-            photos_count: allPhotoCountMap[sessionItem.id] || 0,
-          }));
+          setProfilesMap(localProfilesMap);
+        }
+      } else {
+        setProfilesMap({});
+      }
 
-          setAllRecords(allRecordsMapped);
+      // Meus registos
+      const { data: sessionsData, error: sessionsError } = await supabase
+        .from("clinical_sessions")
+        .select("*")
+        .eq("user_id", currentUserId)
+        .order("started_at", { ascending: false });
+
+      const archivedByIds = [
+        ...new Set(
+          (sessionsData || [])
+            .map((s) => s.archived_by_user_id)
+            .filter(Boolean)
+        ),
+      ];
+
+      if (archivedByIds.length > 0) {
+        const { data: archivedProfiles, error: archivedProfilesError } =
+          await supabase
+            .from("profiles")
+            .select("id, full_name")
+            .in("id", archivedByIds);
+
+        if (archivedProfilesError) {
+          console.error(
+            "Erro ao carregar archived_by profiles:",
+            archivedProfilesError
+          );
+        } else {
+          (archivedProfiles || []).forEach((p) => {
+            localProfilesMap[p.id] = p.full_name || p.id;
+          });
+
+          setProfilesMap({ ...localProfilesMap });
         }
       }
-    } else {
-      setAllRecords([]);
+
+      if (sessionsError) {
+        console.error("Erro ao carregar meus registos:", sessionsError);
+        setMyRecords([]);
+      } else {
+        const sessions = sessionsData || [];
+
+        if (sessions.length === 0) {
+          setMyRecords([]);
+        } else {
+          const sessionIds = sessions.map((s) => s.id);
+
+          const { data: photosData, error: photosError } = await supabase
+            .from("session_photos")
+            .select("session_id, id")
+            .in("session_id", sessionIds);
+
+          if (photosError) {
+            console.error("Erro ao carregar contagem de fotos:", photosError);
+          }
+
+          const photoCountMap = {};
+          (photosData || []).forEach((photo) => {
+            photoCountMap[photo.session_id] =
+              (photoCountMap[photo.session_id] || 0) + 1;
+          });
+
+          const records = sessions.map((sessionItem) => ({
+            ...sessionItem,
+            user_name: localProfilesMap[sessionItem.user_id] || sessionItem.user_id,
+            photos_count: photoCountMap[sessionItem.id] || 0,
+          }));
+
+          setMyRecords(records);
+        }
+      }
+
+      // Todos os registos apenas para admins
+      if (isGlobalAdmin || currentModuleRole === "module_admin") {
+        const { data: allSessionsData, error: allSessionsError } = await supabase
+          .from("clinical_sessions")
+          .select("*")
+          .order("started_at", { ascending: false });
+
+        if (allSessionsError) {
+          console.error("Erro ao carregar todos os registos:", allSessionsError);
+          setAllRecords([]);
+        } else {
+          const allSessions = allSessionsData || [];
+
+          if (allSessions.length === 0) {
+            setAllRecords([]);
+          } else {
+            const allSessionIds = allSessions.map((s) => s.id);
+
+            const { data: allPhotosData, error: allPhotosError } = await supabase
+              .from("session_photos")
+              .select("session_id, id")
+              .in("session_id", allSessionIds);
+
+            if (allPhotosError) {
+              console.error(
+                "Erro ao carregar contagem global de fotos:",
+                allPhotosError
+              );
+            }
+
+            const allPhotoCountMap = {};
+            (allPhotosData || []).forEach((photo) => {
+              allPhotoCountMap[photo.session_id] =
+                (allPhotoCountMap[photo.session_id] || 0) + 1;
+            });
+
+            const allRecordsMapped = allSessions.map((sessionItem) => ({
+              ...sessionItem,
+              user_name:
+                localProfilesMap[sessionItem.user_id] || sessionItem.user_id,
+              photos_count: allPhotoCountMap[sessionItem.id] || 0,
+            }));
+
+            setAllRecords(allRecordsMapped);
+          }
+        }
+      } else {
+        setAllRecords([]);
+      }
+    } catch (error) {
+      console.error("Erro ao carregar dados:", error);
+    } finally {
+      setLoading(false);
     }
-  } catch (error) {
-    console.error("Erro ao carregar dados:", error);
-  } finally {
-    setLoading(false);
-  }
-}, [currentUserId]);
+  }, [currentUserId]);
 
   useEffect(() => {
     if (!session?.access_token || !CAMERA_ID) return;
@@ -585,26 +595,26 @@ const loadData = useCallback(async () => {
   });
 
   function openConfirmModal({ title, message, confirmText, type, action }) {
-  setConfirmModal({
-    open: true,
-    title,
-    message,
-    confirmText,
-    type: type || "default",
-    action,
-  });
-}
+    setConfirmModal({
+      open: true,
+      title,
+      message,
+      confirmText,
+      type: type || "default",
+      action,
+    });
+  }
 
-function closeConfirmModal() {
-  setConfirmModal({
-    open: false,
-    title: "",
-    message: "",
-    confirmText: "",
-    action: null,
-    type: "default",
-  });
-}
+  function closeConfirmModal() {
+    setConfirmModal({
+      open: false,
+      title: "",
+      message: "",
+      confirmText: "",
+      action: null,
+      type: "default",
+    });
+  }
 
   function getStatusMeta(status) {
     switch (status) {
@@ -699,27 +709,27 @@ function closeConfirmModal() {
     return data;
   }
 
-async function apiGet(path) {
-  const {
-    data: { session: activeSession },
-  } = await supabase.auth.getSession();
+  async function apiGet(path) {
+    const {
+      data: { session: activeSession },
+    } = await supabase.auth.getSession();
 
-  const token = activeSession?.access_token;
+    const token = activeSession?.access_token;
 
-  if (!token) {
-    throw new Error("Sessão expirada. Faz login novamente.");
+    if (!token) {
+      throw new Error("Sessão expirada. Faz login novamente.");
+    }
+
+    const response = await axios.get(`${API_BASE_URL}${path}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    console.log("API GET RESPONSE:", path, response.data);
+
+    return response.data;
   }
-
-  const response = await axios.get(`${API_BASE_URL}${path}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  console.log("API GET RESPONSE:", path, response.data);
-
-  return response.data;
-}
 
 
   async function expireTurn() {
@@ -780,90 +790,90 @@ async function apiGet(path) {
     }
   }
 
-async function loadTeachers() {
-  try {
-    const data = await apiGet("/api/teachers");
-    setTeachers(data.teachers || []);
-  } catch (error) {
-    console.error("Erro ao carregar professores:", error);
-    setTeachers([]);
-  }
-}
-
-async function loadSessionTeachers(sessionId) {
-  try {
-    const data = await apiGet(`/api/session/${sessionId}/teachers`);
-    setSessionTeachers(data.teachers || []);
-  } catch (error) {
-    console.error("Erro ao carregar professores da sessão:", error);
-    setSessionTeachers([]);
-  }
-}
-
-async function assignTeacherToSession() {
-  if (!selectedRecord?.id || !selectedTeacherId) {
-    setMsg({
-      text: "Seleciona um professor antes de guardar.",
-      type: "warning",
-    });
-    return;
+  async function loadTeachers() {
+    try {
+      const data = await apiGet("/api/teachers");
+      setTeachers(data.teachers || []);
+    } catch (error) {
+      console.error("Erro ao carregar professores:", error);
+      setTeachers([]);
+    }
   }
 
-  try {
-    setLoadingTeachers(true);
+  async function loadSessionTeachers(sessionId) {
+    try {
+      const data = await apiGet(`/api/session/${sessionId}/teachers`);
+      setSessionTeachers(data.teachers || []);
+    } catch (error) {
+      console.error("Erro ao carregar professores da sessão:", error);
+      setSessionTeachers([]);
+    }
+  }
 
-    const data = await apiPost("/api/session/assign-teacher", {
-      sessionId: selectedRecord.id,
-      teacherUserId: selectedTeacherId,
-    });
-
-    if (data?.assigned) {
+  async function assignTeacherToSession() {
+    if (!selectedRecord?.id || !selectedTeacherId) {
       setMsg({
-        text: "Professor associado ao registo com sucesso.",
-        type: "success",
+        text: "Seleciona um professor antes de guardar.",
+        type: "warning",
+      });
+      return;
+    }
+
+    try {
+      setLoadingTeachers(true);
+
+      const data = await apiPost("/api/session/assign-teacher", {
+        sessionId: selectedRecord.id,
+        teacherUserId: selectedTeacherId,
       });
 
-      setSelectedTeacherId("");
-      await loadSessionTeachers(selectedRecord.id);
-    }
-  } catch (error) {
-    console.error("ASSIGN TEACHER ERROR:", error);
-    setMsg({
-      text: error.message || "Erro ao associar professor.",
-      type: "warning",
-    });
-  } finally {
-    setLoadingTeachers(false);
-  }
-}
+      if (data?.assigned) {
+        setMsg({
+          text: "Professor associado ao registo com sucesso.",
+          type: "success",
+        });
 
-
-async function removeTeacherFromSession(accessId) {
-  try {
-    setLoadingTeachers(true);
-
-    const data = await apiPost("/api/session/remove-teacher", {
-      accessId,
-    });
-
-    if (data?.removed) {
+        setSelectedTeacherId("");
+        await loadSessionTeachers(selectedRecord.id);
+      }
+    } catch (error) {
+      console.error("ASSIGN TEACHER ERROR:", error);
       setMsg({
-        text: "Professor removido do registo.",
-        type: "success",
+        text: error.message || "Erro ao associar professor.",
+        type: "warning",
+      });
+    } finally {
+      setLoadingTeachers(false);
+    }
+  }
+
+
+  async function removeTeacherFromSession(accessId) {
+    try {
+      setLoadingTeachers(true);
+
+      const data = await apiPost("/api/session/remove-teacher", {
+        accessId,
       });
 
-      await loadSessionTeachers(selectedRecord.id);
+      if (data?.removed) {
+        setMsg({
+          text: "Professor removido do registo.",
+          type: "success",
+        });
+
+        await loadSessionTeachers(selectedRecord.id);
+      }
+    } catch (error) {
+      console.error("REMOVE TEACHER ERROR:", error);
+      setMsg({
+        text: error.message || "Erro ao remover professor.",
+        type: "warning",
+      });
+    } finally {
+      setLoadingTeachers(false);
     }
-  } catch (error) {
-    console.error("REMOVE TEACHER ERROR:", error);
-    setMsg({
-      text: error.message || "Erro ao remover professor.",
-      type: "warning",
-    });
-  } finally {
-    setLoadingTeachers(false);
   }
-}
 
   useEffect(() => {
     if (!session?.access_token) return;
@@ -1028,36 +1038,36 @@ async function removeTeacherFromSession(accessId) {
   }
 
 
-async function startSession() {
-  try {
-    setMsg("");
+  async function startSession() {
+    try {
+      setMsg("");
 
-    const data = await apiPost("/api/session/start", {
-      cameraId: CAMERA_ID,
-      patientCode: draftPatientCode,
-      box: draftBox,
-    });
-
-    if (data.started) {
-      setMsg({
-        text: "Sessão iniciada com sucesso.",
-        type: "success",
+      const data = await apiPost("/api/session/start", {
+        cameraId: CAMERA_ID,
+        patientCode: draftPatientCode,
+        box: draftBox,
       });
 
-      setDraftBox("");
-      setDraftPatientCode("");
-      setShowTurnModal(false);
+      if (data.started) {
+        setMsg({
+          text: "Sessão iniciada com sucesso.",
+          type: "success",
+        });
 
-      await loadData();
+        setDraftBox("");
+        setDraftPatientCode("");
+        setShowTurnModal(false);
+
+        await loadData();
+      }
+    } catch (error) {
+      console.error("START SESSION ERROR:", error);
+      setMsg({
+        text: error.message,
+        type: "warning",
+      });
     }
-  } catch (error) {
-    console.error("START SESSION ERROR:", error);
-    setMsg({
-      text: error.message,
-      type: "warning",
-    });
   }
-}
 
   async function pauseSession() {
     setMsg("");
@@ -1237,40 +1247,40 @@ async function startSession() {
     return data.signedUrl;
   }
 
-async function openRecordModal(record) {
-  setSelectedRecord(record);
+  async function openRecordModal(record) {
+    setSelectedRecord(record);
 
-  const { data: recordPhotos, error } = await supabase
-    .from("session_photos")
-    .select("*")
-    .eq("session_id", record.id)
-    .order("captured_at", { ascending: false });
+    const { data: recordPhotos, error } = await supabase
+      .from("session_photos")
+      .select("*")
+      .eq("session_id", record.id)
+      .order("captured_at", { ascending: false });
 
-  if (error) {
-    console.error("Erro ao carregar fotos do registo:", error);
-    setSelectedRecordPhotos([]);
-    setPhotoPreviewMap({});
-  } else {
-    const photos = recordPhotos || [];
-    setSelectedRecordPhotos(photos);
+    if (error) {
+      console.error("Erro ao carregar fotos do registo:", error);
+      setSelectedRecordPhotos([]);
+      setPhotoPreviewMap({});
+    } else {
+      const photos = recordPhotos || [];
+      setSelectedRecordPhotos(photos);
 
-    const previewEntries = await Promise.all(
-      photos.map(async (photo) => {
-        const url = await getSignedPhotoUrl(photo.storage_path);
-        return [photo.id, url];
-      })
-    );
+      const previewEntries = await Promise.all(
+        photos.map(async (photo) => {
+          const url = await getSignedPhotoUrl(photo.storage_path);
+          return [photo.id, url];
+        })
+      );
 
-    const previewMap = Object.fromEntries(previewEntries);
-    setPhotoPreviewMap(previewMap);
+      const previewMap = Object.fromEntries(previewEntries);
+      setPhotoPreviewMap(previewMap);
+    }
+
+    // 👉 NOVO
+    await loadTeachers();
+    await loadSessionTeachers(record.id);
+
+    setIsRecordModalOpen(true);
   }
-
-  // 👉 NOVO
-  await loadTeachers();
-  await loadSessionTeachers(record.id);
-
-  setIsRecordModalOpen(true);
-}
 
   async function updatePhase(phase) {
     try {
@@ -2118,36 +2128,36 @@ async function openRecordModal(record) {
             }}
           >
             <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-  <button
-    type="button"
-    onClick={() => setRecordsFilterMode("active")}
-    style={{
-      opacity: recordsFilterMode === "active" ? 1 : 0.7,
-    }}
-  >
-    Ativos
-  </button>
+              <button
+                type="button"
+                onClick={() => setRecordsFilterMode("active")}
+                style={{
+                  opacity: recordsFilterMode === "active" ? 1 : 0.7,
+                }}
+              >
+                Ativos
+              </button>
 
-  <button
-    type="button"
-    onClick={() => setRecordsFilterMode("archived")}
-    style={{
-      opacity: recordsFilterMode === "archived" ? 1 : 0.7,
-    }}
-  >
-    Arquivados
-  </button>
+              <button
+                type="button"
+                onClick={() => setRecordsFilterMode("archived")}
+                style={{
+                  opacity: recordsFilterMode === "archived" ? 1 : 0.7,
+                }}
+              >
+                Arquivados
+              </button>
 
-  <button
-    type="button"
-    onClick={() => setRecordsFilterMode("all")}
-    style={{
-      opacity: recordsFilterMode === "all" ? 1 : 0.7,
-    }}
-  >
-    Todos
-  </button>
-</div>
+              <button
+                type="button"
+                onClick={() => setRecordsFilterMode("all")}
+                style={{
+                  opacity: recordsFilterMode === "all" ? 1 : 0.7,
+                }}
+              >
+                Todos
+              </button>
+            </div>
 
             <div>
               <h2 style={{ margin: 0, color: "#1e4a8d", fontSize: "1.7rem" }}>
