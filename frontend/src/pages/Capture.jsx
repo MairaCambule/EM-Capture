@@ -227,17 +227,20 @@ const canStartSessionFinal = canStartSession && hasRequiredSessionData;
       } else {
         setProfile(profileData);
         if (profileData?.role?.trim().toLowerCase() === "teacher") {
-        //if (profileData?.role === "teacher") {
           try {
+            console.log("A chamar /api/teacher/records...");
+
             const data = await apiGet("/api/teacher/records");
-            console.log("TEACHER RECORDS:", data);
-            setTeacherRecords(data.records || []);
+
+            console.log("RESPOSTA PROFESSOR RECORDS:", data);
+            console.log("RECORDS ARRAY:", data?.records);
+
+            setTeacherRecords(data?.records || []);
           } catch (error) {
             console.error("Erro ao carregar registos do professor:", error);
             setTeacherRecords([]);
           }
-        
-      }
+        }
 
       }
 
