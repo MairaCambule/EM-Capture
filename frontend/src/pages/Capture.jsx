@@ -229,6 +229,7 @@ const canStartSessionFinal = canStartSession && hasRequiredSessionData;
         if (profileData?.role === "teacher") {
           try {
             const data = await apiGet("/api/teacher/records");
+            console.log("TEACHER RECORDS:", data);
             setTeacherRecords(data.records || []);
           } catch (error) {
             console.error("Erro ao carregar registos do professor:", error);
@@ -237,7 +238,7 @@ const canStartSessionFinal = canStartSession && hasRequiredSessionData;
         }
 
       }
-  
+
       const { data: moduleData, error: moduleError } = await supabase
         .from("user_module_access")
         .select(`
