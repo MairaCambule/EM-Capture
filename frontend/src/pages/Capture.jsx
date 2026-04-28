@@ -675,7 +675,7 @@ function closeConfirmModal() {
     return data;
   }
 
- async function apiGet(path) {
+async function apiGet(path) {
   const {
     data: { session: activeSession },
   } = await supabase.auth.getSession();
@@ -691,6 +691,8 @@ function closeConfirmModal() {
       Authorization: `Bearer ${token}`,
     },
   });
+
+  console.log("API GET RESPONSE:", path, response.data);
 
   return response.data;
 }
