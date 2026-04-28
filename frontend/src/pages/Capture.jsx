@@ -103,13 +103,17 @@ export default function Capture({ session }) {
   const isModuleAdmin = moduleRole === "module_admin";
   const canViewAllRecords = isGlobalAdmin || isModuleAdmin;
 
+const isTeacher =
+  (profileData?.role || profile?.role)?.trim().toLowerCase() === "teacher";
+
 const baseRecords =
-  profile?.role?.trim().toLowerCase() === "teacher"
+  isTeacher
     ? teacherRecords
     : recordsView === "all" && canViewAllRecords
     ? allRecords
-    : myRecords; 
+    : myRecords;
 
+    
 const filteredRecordsByArchive = baseRecords.filter((record) => {
   if (recordsFilterMode === "active") return !record.is_archived;
   if (recordsFilterMode === "archived") return !!record.is_archived;
@@ -226,7 +230,7 @@ const canStartSessionFinal = canStartSession && hasRequiredSessionData;
         console.error("Erro ao carregar profile:", profileError);
       } else {
         setProfile(profileData);
-        if (profileData?.role?.trim().toLowerCase() === "teacher") {
+        if ((profileData?.role || profile?.role)?.trim().toLowerCase() === "teacher") {
           try {
             console.log("A chamar teacher records direto...");
 
