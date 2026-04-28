@@ -37,6 +37,15 @@ export default function Capture({ session }) {
   const [loadingId, setLoadingId] = useState(null);
 
   const [currentPhase, setCurrentPhase] = useState("during");
+  const [confirmModal, setConfirmModal] = useState({
+  open: false,
+  title: "",
+  message: "",
+  confirmText: "",
+  action: null,
+  type: "default",
+});
+
 
   const [showStopConfirmModal, setShowStopConfirmModal] = useState(false);
 
@@ -530,6 +539,28 @@ const canStartSessionFinal = canStartSession && hasRequiredSessionData;
       matchesStatus
     );
   });
+
+  function openConfirmModal({ title, message, confirmText, type, action }) {
+  setConfirmModal({
+    open: true,
+    title,
+    message,
+    confirmText,
+    type: type || "default",
+    action,
+  });
+}
+
+function closeConfirmModal() {
+  setConfirmModal({
+    open: false,
+    title: "",
+    message: "",
+    confirmText: "",
+    action: null,
+    type: "default",
+  });
+}
 
   function getStatusMeta(status) {
     switch (status) {
@@ -1186,100 +1217,102 @@ async function startSession() {
     setShowStopConfirmModal(false);
     await stopSession();
   }
+
+
   async function archiveRecord(sessionId) {
     try {
+      setRecordActionLoadingId(sessionId);
+
       const data = await apiPost("/api/session/archive", { sessionId });
 
-      if (data.archived) {
+      if (data?.archived) {
         setMsg({
           text: "Registo arquivado com sucesso.",
           type: "success",
         });
 
         await loadData();
+
         if (selectedRecord?.id === sessionId) {
           closeRecordModal();
         }
+      } else {
+        throw new Error(data?.error || "Erro ao arquivar registo.");
       }
     } catch (error) {
       console.error("ARCHIVE RECORD ERROR:", error);
+
       setMsg({
-        text: error.message,
+        text: error.message || "Erro ao arquivar registo.",
         type: "warning",
       });
+    } finally {
+      setRecordActionLoadingId(null);
     }
   }
 
-async function restoreRecord(sessionId) {
-  const confirmAction = window.confirm(
-    "Tens a certeza que queres restaurar este registo?"
-  );
-  if (!confirmAction) return;
+  async function restoreRecord(sessionId) {
+    try {
+      setRecordActionLoadingId(sessionId);
 
-  try {
-    setRecordActionLoadingId(sessionId);
+      const data = await apiPost("/api/session/restore", { sessionId });
 
-    const data = await apiPost("/api/session/restore", { sessionId });
+      if (data?.restored) {
+        setMsg({
+          text: "Registo restaurado com sucesso.",
+          type: "success",
+        });
 
-    if (data?.restored) {
-      setMsg({
-        text: "Registo restaurado com sucesso.",
-        type: "success",
-      });
-
-      await loadData();
-    } else {
-      throw new Error(data?.error || "Erro ao restaurar registo.");
-    }
-  } catch (error) {
-    console.error("RESTORE RECORD ERROR:", error);
-    setMsg({
-      text: error.message || "Erro ao restaurar registo.",
-      type: "warning",
-    });
-  } finally {
-    setRecordActionLoadingId(null);
-  }
-}
-
-
-async function deleteRecordPermanently(sessionId) {
-  const confirmAction = window.confirm(
-    "⚠️ Esta ação é irreversível.\n\nQueres eliminar este registo definitivamente?"
-  );
-  if (!confirmAction) return;
-
-  try {
-    setRecordActionLoadingId(sessionId);
-
-    const data = await apiPost("/api/session/delete-permanently", {
-      sessionId,
-    });
-
-    if (data?.deleted) {
-      setMsg({
-        text: "Registo eliminado definitivamente.",
-        type: "success",
-      });
-
-      await loadData();
-
-      if (selectedRecord?.id === sessionId) {
-        closeRecordModal();
+        await loadData();
+      } else {
+        throw new Error(data?.error || "Erro ao restaurar registo.");
       }
-    } else {
-      throw new Error(data?.error || "Erro ao eliminar registo.");
+    } catch (error) {
+      console.error("RESTORE RECORD ERROR:", error);
+
+      setMsg({
+        text: error.message || "Erro ao restaurar registo.",
+        type: "warning",
+      });
+    } finally {
+      setRecordActionLoadingId(null);
     }
-  } catch (error) {
-    console.error("DELETE RECORD ERROR:", error);
-    setMsg({
-      text: error.message || "Erro ao eliminar registo.",
-      type: "warning",
-    });
-  } finally {
-    setRecordActionLoadingId(null);
   }
-}
+
+  async function deleteRecordPermanently(sessionId) {
+    try {
+      setRecordActionLoadingId(sessionId);
+
+      const data = await apiPost("/api/session/delete-permanently", {
+        sessionId,
+      });
+
+      if (data?.deleted) {
+        setMsg({
+          text: "Registo eliminado definitivamente.",
+          type: "success",
+        });
+
+        await loadData();
+
+        if (selectedRecord?.id === sessionId) {
+          closeRecordModal();
+        }
+      } else {
+        throw new Error(data?.error || "Erro ao eliminar registo.");
+      }
+    } catch (error) {
+      console.error("DELETE RECORD ERROR:", error);
+
+      setMsg({
+        text: error.message || "Erro ao eliminar registo.",
+        type: "warning",
+      });
+    } finally {
+      setRecordActionLoadingId(null);
+    }
+  }
+
 
   function closeRecordModal() {
     setIsRecordModalOpen(false);
@@ -2227,7 +2260,16 @@ async function deleteRecordPermanently(sessionId) {
                           <button
                             type="button"
                             disabled={recordActionLoadingId === record.id}
-                            onClick={() => archiveRecord(record.id)}
+                            onClick={() =>
+                              openConfirmModal({
+                                title: "Arquivar registo",
+                                message:
+                                  "Este registo deixará de aparecer na lista de ativos, mas poderá ser restaurado por um administrador.",
+                                confirmText: "Arquivar",
+                                type: "warning",
+                                action: () => archiveRecord(record.id),
+                              })
+                            }
                           >
                             {recordActionLoadingId === record.id ? "A arquivar..." : "Arquivar"}
                           </button>
@@ -2238,14 +2280,31 @@ async function deleteRecordPermanently(sessionId) {
                             <button
                               type="button"
                               disabled={recordActionLoadingId === record.id}
-                              onClick={() => restoreRecord(record.id)}
+                              onClick={() =>
+                                openConfirmModal({
+                                  title: "Restaurar registo",
+                                  message: "Este registo voltará a aparecer na lista de ativos.",
+                                  confirmText: "Restaurar",
+                                  type: "success",
+                                  action: () => restoreRecord(record.id),
+                                })
+                              }
                             >
                               {recordActionLoadingId === record.id ? "A restaurar..." : "Restaurar"}
                             </button>
                             <button
                               type="button"
                               disabled={recordActionLoadingId === record.id}
-                              onClick={() => deleteRecordPermanently(record.id)}
+                              onClick={() =>
+                                openConfirmModal({
+                                  title: "Eliminar definitivamente",
+                                  message:
+                                    "Esta ação é irreversível. O registo será eliminado permanentemente.",
+                                  confirmText: "Eliminar definitivo",
+                                  type: "danger",
+                                  action: () => deleteRecordPermanently(record.id),
+                                })
+                              }
                             >
                               {recordActionLoadingId === record.id
                                 ? "A eliminar..."
@@ -2598,6 +2657,102 @@ async function deleteRecordPermanently(sessionId) {
                 onClick={() => setShowTurnModal(false)}
               >
                 Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmModal.open && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.55)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+            padding: 20,
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 24,
+              padding: 28,
+              width: "100%",
+              maxWidth: 460,
+              boxShadow: "0 24px 80px rgba(15, 23, 42, 0.25)",
+            }}
+          >
+            <div
+              style={{
+                width: 54,
+                height: 54,
+                borderRadius: "50%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                marginBottom: 18,
+                background:
+                  confirmModal.type === "danger"
+                    ? "#fee2e2"
+                    : confirmModal.type === "success"
+                      ? "#dcfce7"
+                      : "#fef3c7",
+                color:
+                  confirmModal.type === "danger"
+                    ? "#b91c1c"
+                    : confirmModal.type === "success"
+                      ? "#15803d"
+                      : "#b45309",
+                fontSize: 24,
+                fontWeight: 800,
+              }}
+            >
+              {confirmModal.type === "danger"
+                ? "!"
+                : confirmModal.type === "success"
+                  ? "✓"
+                  : "?"}
+            </div>
+
+            <h3 style={{ margin: 0, color: "#17324d", fontSize: "1.4rem" }}>
+              {confirmModal.title}
+            </h3>
+
+            <p style={{ color: "#5f6b7a", marginTop: 12, lineHeight: 1.6 }}>
+              {confirmModal.message}
+            </p>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: 12,
+                marginTop: 24,
+              }}
+            >
+              <button type="button" onClick={closeConfirmModal}>
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  if (confirmModal.action) {
+                    await confirmModal.action();
+                  }
+                  closeConfirmModal();
+                }}
+                style={{
+                  background:
+                    confirmModal.type === "danger" ? "#b91c1c" : "#1e4a8d",
+                  color: "#fff",
+                }}
+              >
+                {confirmModal.confirmText}
               </button>
             </div>
           </div>
