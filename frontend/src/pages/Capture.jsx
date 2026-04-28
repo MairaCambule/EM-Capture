@@ -102,7 +102,7 @@ export default function Capture({ session }) {
 
   const isModuleAdmin = moduleRole === "module_admin";
   const canViewAllRecords = isGlobalAdmin || isModuleAdmin;
-  
+
 const baseRecords =
   profile?.role?.trim().toLowerCase() === "teacher"
     ? teacherRecords
@@ -675,38 +675,25 @@ function closeConfirmModal() {
     return data;
   }
 
-  async function apiGet(path) {
-    const {
-      data: { session: activeSession },
-      error: sessionError,
-    } = await supabase.auth.getSession();
+ async function apiGet(path) {
+  const {
+    data: { session: activeSession },
+  } = await supabase.auth.getSession();
 
-    if (sessionError || !activeSession?.access_token) {
-      throw new Error("Sessão inválida. Faz login novamente.");
-    }
+  const token = activeSession?.access_token;
 
-    const response = await fetch(`${API_BASE_URL}${path}`, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${activeSession.access_token}`,
-      },
-    });
-
-    const text = await response.text();
-
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      throw new Error("O backend devolveu uma resposta inválida.");
-    }
-
-    if (!response.ok) {
-      throw new Error(data.error || "Erro ao obter dados.");
-    }
-
-    return data;
+  if (!token) {
+    throw new Error("Sessão expirada. Faz login novamente.");
   }
+
+  const response = await axios.get(`${API_BASE_URL}${path}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  return response.data;
+}
 
 
   async function expireTurn() {
