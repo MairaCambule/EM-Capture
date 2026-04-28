@@ -2393,13 +2393,6 @@ async function openRecordModal(record) {
                 Professores com acesso
               </h3>
 
-              {/* Lista de professores já associados */}
-              {sessionTeachers.length === 0 && (
-                <p style={{ color: "#5f6b7a" }}>
-                  Nenhum professor associado a este registo.
-                </p>
-              )}
-
               {sessionTeachers.map((item) => (
                 <div
                   key={item.id}
