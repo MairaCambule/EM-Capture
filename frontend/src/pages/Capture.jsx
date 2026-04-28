@@ -1797,70 +1797,7 @@ async function openRecordModal(record) {
           </div>
         </div>
 
-        <div style={{ marginTop: 20 }}>
-          <h3 style={{ marginBottom: 10 }}>👩‍🏫 Professores com acesso</h3>
 
-          {/* Dropdown */}
-          {/*<div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
-    <select
-      value={selectedTeacherId}
-      onChange={(e) => setSelectedTeacherId(e.target.value)}
-      style={{
-        padding: "10px",
-        borderRadius: "8px",
-        border: "1px solid #ccc",
-        minWidth: "220px",
-      }}
-    >
-      <option value="">Selecionar professor</option>
-
-      {teachers.map((t) => (
-        <option key={t.id} value={t.id}>
-          {t.full_name}
-        </option>
-      ))}
-    </select>
-
-    <button
-      onClick={() => assignTeacher(selectedRecord.id)}
-      style={{
-        padding: "10px 16px",
-        borderRadius: "8px",
-        border: "none",
-        background: "#2e7d32",
-        color: "white",
-        fontWeight: 600,
-        cursor: "pointer",
-      }}
-    >
-      Dar acesso
-    </button>
-  </div>
-*/}
-
-          {/* Lista */}
-          {/*<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-    {sessionTeachers.length === 0 && (
-      <span style={{ color: "#777" }}>
-        Nenhum professor associado
-      </span>
-    )}
-
-    {sessionTeachers.map((item) => (
-      <div
-        key={item.id}
-        style={{
-          padding: "8px 12px",
-          background: "#f5f5f5",
-          borderRadius: "6px",
-        }}
-      >
-        {item.teacher?.full_name || "Professor"}
-      </div>
-    ))}
-  </div>
-  */}
-        </div>
         {canSeeSessionClinic && (
           <div
             style={{
