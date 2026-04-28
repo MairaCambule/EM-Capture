@@ -228,14 +228,22 @@ const canStartSessionFinal = canStartSession && hasRequiredSessionData;
         setProfile(profileData);
         if (profileData?.role?.trim().toLowerCase() === "teacher") {
           try {
-            console.log("A chamar /api/teacher/records...");
+            console.log("A chamar teacher records direto...");
 
-            const data = await apiGet("/api/teacher/records");
+            const {
+              data: { session: activeSession },
+            } = await supabase.auth.getSession();
 
-            console.log("RESPOSTA PROFESSOR RECORDS:", data);
-            console.log("RECORDS ARRAY:", data?.records);
+            const response = await axios.get(`${API_BASE_URL}/api/teacher/records`, {
+              headers: {
+                Authorization: `Bearer ${activeSession?.access_token}`,
+              },
+            });
 
-            setTeacherRecords(data?.records || []);
+            console.log("RESPONSE COMPLETA:", response);
+            console.log("RESPONSE DATA:", response.data);
+
+            setTeacherRecords(response.data?.records || []);
           } catch (error) {
             console.error("Erro ao carregar registos do professor:", error);
             setTeacherRecords([]);
