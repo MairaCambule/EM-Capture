@@ -747,50 +747,62 @@ function closeConfirmModal() {
     }
   }
 
-  /*async function loadTeachers() {
-    try {
-      const data = await apiGet("/api/teachers");
-      setTeachers(data.teachers || []);
-    } catch (error) {
-      console.error("Erro ao carregar professores:", error);
-      setTeachers([]);
-    }
+async function loadTeachers() {
+  try {
+    const data = await apiGet("/api/teachers");
+    setTeachers(data.teachers || []);
+  } catch (error) {
+    console.error("Erro ao carregar professores:", error);
+    setTeachers([]);
   }
-  
-  
-  async function loadSessionTeachers(sessionId) {
-    try {
-      const res = await api.get(`/api/session/${sessionId}/teachers`);
-  
-      console.log("Session teachers:", res.data);
-  
-      setSessionTeachers(res.data.teachers || []);
-    } catch (err) {
-      console.error("Erro ao carregar professores da sessão:", err);
-    }
-  }
-  
-  
-  
-  async function assignTeacher(sessionId) {
-    if (!selectedTeacherId) return;
-  
-    try {
-      await api.post("/api/session/assign-teacher", {
-        sessionId,
-        teacherUserId: selectedTeacherId,
-      });
-  
-      // reload
-      await loadSessionTeachers(sessionId);
-  
-      setSelectedTeacherId("");
-    } catch (err) {
-      console.error("Erro ao associar professor:", err);
-    }
-  }
-    */
+}
 
+async function loadSessionTeachers(sessionId) {
+  try {
+    const data = await apiGet(`/api/session/${sessionId}/teachers`);
+    setSessionTeachers(data.teachers || []);
+  } catch (error) {
+    console.error("Erro ao carregar professores da sessão:", error);
+    setSessionTeachers([]);
+  }
+}
+
+async function assignTeacherToSession() {
+  if (!selectedRecord?.id || !selectedTeacherId) {
+    setMsg({
+      text: "Seleciona um professor antes de guardar.",
+      type: "warning",
+    });
+    return;
+  }
+
+  try {
+    setLoadingTeachers(true);
+
+    const data = await apiPost("/api/session/assign-teacher", {
+      sessionId: selectedRecord.id,
+      teacherUserId: selectedTeacherId,
+    });
+
+    if (data?.assigned) {
+      setMsg({
+        text: "Professor associado ao registo com sucesso.",
+        type: "success",
+      });
+
+      setSelectedTeacherId("");
+      await loadSessionTeachers(selectedRecord.id);
+    }
+  } catch (error) {
+    console.error("ASSIGN TEACHER ERROR:", error);
+    setMsg({
+      text: error.message || "Erro ao associar professor.",
+      type: "warning",
+    });
+  } finally {
+    setLoadingTeachers(false);
+  }
+}
   useEffect(() => {
     if (!session?.access_token) return;
     //loadTeachers();   - temporario
@@ -1163,36 +1175,41 @@ async function startSession() {
     return data.signedUrl;
   }
 
-  async function openRecordModal(record) {
-    setSelectedRecord(record);
+async function openRecordModal(record) {
+  setSelectedRecord(record);
 
-    const { data: recordPhotos, error } = await supabase
-      .from("session_photos")
-      .select("*")
-      .eq("session_id", record.id)
-      .order("captured_at", { ascending: false });
+  const { data: recordPhotos, error } = await supabase
+    .from("session_photos")
+    .select("*")
+    .eq("session_id", record.id)
+    .order("captured_at", { ascending: false });
 
-    if (error) {
-      console.error("Erro ao carregar fotos do registo:", error);
-      setSelectedRecordPhotos([]);
-      setPhotoPreviewMap({});
-    } else {
-      const photos = recordPhotos || [];
-      setSelectedRecordPhotos(photos);
+  if (error) {
+    console.error("Erro ao carregar fotos do registo:", error);
+    setSelectedRecordPhotos([]);
+    setPhotoPreviewMap({});
+  } else {
+    const photos = recordPhotos || [];
+    setSelectedRecordPhotos(photos);
 
-      const previewEntries = await Promise.all(
-        photos.map(async (photo) => {
-          const url = await getSignedPhotoUrl(photo.storage_path);
-          return [photo.id, url];
-        })
-      );
+    const previewEntries = await Promise.all(
+      photos.map(async (photo) => {
+        const url = await getSignedPhotoUrl(photo.storage_path);
+        return [photo.id, url];
+      })
+    );
 
-      const previewMap = Object.fromEntries(previewEntries);
-      setPhotoPreviewMap(previewMap);
-    }
-
-    setIsRecordModalOpen(true);
+    const previewMap = Object.fromEntries(previewEntries);
+    setPhotoPreviewMap(previewMap);
   }
+
+  // 👉 NOVO
+  await loadTeachers();
+  await loadSessionTeachers(record.id);
+
+  setIsRecordModalOpen(true);
+}
+
   async function updatePhase(phase) {
     try {
       const data = await apiPost("/api/camera/phase", {
@@ -2434,7 +2451,76 @@ async function startSession() {
                 {selectedRecord.id}
               </div>
             </div>
+            <div style={{ marginTop: 24 }}>
+              <h3 style={{ color: "#17324d", marginBottom: 12 }}>
+                Professores com acesso
+              </h3>
 
+              {/* Lista de professores já associados */}
+              {sessionTeachers.length === 0 && (
+                <p style={{ color: "#5f6b7a" }}>
+                  Nenhum professor associado a este registo.
+                </p>
+              )}
+
+              {sessionTeachers.map((item) => (
+                <div
+                  key={item.id}
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: 8,
+                    background: "#f1f5f9",
+                    marginBottom: 6,
+                  }}
+                >
+                  {item.teacher?.full_name || item.teacher_user_id}
+                </div>
+              ))}
+
+              {/* Selecionar professor */}
+              <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
+                {sessionTeachers.length === 0 ? (
+                  <p style={{ color: "#5f6b7a" }}>
+                    Nenhum professor associado.
+                  </p>
+                ) : (
+                  sessionTeachers.map((item) => (
+                    <div
+                      key={item.id}
+                      style={{
+                        padding: "8px 12px",
+                        borderRadius: 8,
+                        background: "#f1f5f9",
+                        marginBottom: 6,
+                      }}
+                    >
+                      {item.teacher?.full_name || item.teacher_user_id}
+                    </div>
+                  ))
+                )}
+                <select
+                  value={selectedTeacherId}
+                  onChange={(e) => setSelectedTeacherId(e.target.value)}
+                  style={{ flex: 1 }}
+                >
+                  <option value="">Selecionar professor</option>
+
+                  {teachers.map((teacher) => (
+                    <option key={teacher.id} value={teacher.id}>
+                      {teacher.full_name}
+                    </option>
+                  ))}
+                </select>
+
+                <button
+                  type="button"
+                  disabled={!selectedTeacherId || loadingTeachers}
+                  onClick={assignTeacherToSession}
+                >
+                  {loadingTeachers ? "A associar..." : "Associar"}
+                </button>
+              </div>
+            </div>
 
             <div>
               <h3 style={{ color: "#1e4a8d", marginBottom: 16 }}>
