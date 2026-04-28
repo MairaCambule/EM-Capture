@@ -227,57 +227,15 @@ const canStartSessionFinal = canStartSession && hasRequiredSessionData;
       } else {
         setProfile(profileData);
         if (profileData?.role === "teacher") {
-  const { data: accessData, error: accessError } = await supabase
-    .from("session_record_access")
-    .select("session_id")
-    .eq("teacher_user_id", currentUserId);
+          try {
+            const data = await apiGet("/api/teacher/records");
+            setTeacherRecords(data.records || []);
+          } catch (error) {
+            console.error("Erro ao carregar registos do professor:", error);
+            setTeacherRecords([]);
+          }
+        }
 
-  if (accessError) {
-    console.error("Erro ao carregar acessos do professor:", accessError);
-    setTeacherRecords([]);
-  } else {
-    const sessionIds = (accessData || []).map((item) => item.session_id);
-
-    if (sessionIds.length === 0) {
-      setTeacherRecords([]);
-    } else {
-      const { data: teacherSessionsData, error: teacherSessionsError } =
-        await supabase
-          .from("clinical_sessions")
-          .select("*")
-          .in("id", sessionIds)
-          .order("started_at", { ascending: false });
-
-      if (teacherSessionsError) {
-        console.error("Erro ao carregar registos do professor:", teacherSessionsError);
-        setTeacherRecords([]);
-      } else {
-        const teacherSessionIds = (teacherSessionsData || []).map((s) => s.id);
-
-        const { data: teacherPhotosData } = await supabase
-          .from("session_photos")
-          .select("session_id, id")
-          .in("session_id", teacherSessionIds);
-
-        const photoCountMap = {};
-        (teacherPhotosData || []).forEach((photo) => {
-          photoCountMap[photo.session_id] =
-            (photoCountMap[photo.session_id] || 0) + 1;
-        });
-
-        const records = (teacherSessionsData || []).map((sessionItem) => ({
-          ...sessionItem,
-          user_name:
-            localProfilesMap[sessionItem.user_id] || sessionItem.user_id,
-          photos_count: photoCountMap[sessionItem.id] || 0,
-        }));
-
-        setTeacherRecords(records);
-      }
-    }
-  }
-}
-        
       }
   
       const { data: moduleData, error: moduleError } = await supabase
