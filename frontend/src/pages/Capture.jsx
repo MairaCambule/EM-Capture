@@ -229,7 +229,7 @@ export default function Capture({ session }) {
         .single();
 
       let loadedProfileRole = "user";
-      let isTeacher = false;
+     // let isTeacher = false;
       let isGlobalAdmin = false;
 
       if (profileError) {
@@ -237,10 +237,14 @@ export default function Capture({ session }) {
         setProfile(null);
       } else {
         setProfile(profileData);
+        const role = (profile?.role || "").trim().toLowerCase();
 
-        loadedProfileRole = (profileData?.role || "user").trim().toLowerCase();
-        isTeacher = loadedProfileRole === "teacher";
-        isGlobalAdmin = loadedProfileRole === "global_admin";
+        const isTeacher = role === "teacher";
+        const isGlobalAdmin = role === "global_admin";
+
+        //loadedProfileRole = (profileData?.role || "user").trim().toLowerCase();
+        //isTeacher = loadedProfileRole === "teacher";
+        //isGlobalAdmin = loadedProfileRole === "global_admin";
 
         console.log("ROLE CARREGADA:", loadedProfileRole);
         console.log("IS TEACHER:", isTeacher);
