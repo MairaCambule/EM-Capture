@@ -803,6 +803,35 @@ async function assignTeacherToSession() {
     setLoadingTeachers(false);
   }
 }
+
+
+async function removeTeacherFromSession(accessId) {
+  try {
+    setLoadingTeachers(true);
+
+    const data = await apiPost("/api/session/remove-teacher", {
+      accessId,
+    });
+
+    if (data?.removed) {
+      setMsg({
+        text: "Professor removido do registo.",
+        type: "success",
+      });
+
+      await loadSessionTeachers(selectedRecord.id);
+    }
+  } catch (error) {
+    console.error("REMOVE TEACHER ERROR:", error);
+    setMsg({
+      text: error.message || "Erro ao remover professor.",
+      type: "warning",
+    });
+  } finally {
+    setLoadingTeachers(false);
+  }
+}
+
   useEffect(() => {
     if (!session?.access_token) return;
     //loadTeachers();   - temporario
@@ -2405,6 +2434,7 @@ async function openRecordModal(record) {
                       style={{
                         display: "inline-flex",
                         alignItems: "center",
+                        gap: 8,
                         padding: "8px 12px",
                         borderRadius: 10,
                         background: "#f1f5f9",
@@ -2414,7 +2444,24 @@ async function openRecordModal(record) {
                         marginBottom: 8,
                       }}
                     >
-                      {item.teacher?.full_name || item.teacher_user_id}
+                      <span>{item.teacher?.full_name || item.teacher_user_id}</span>
+
+                      <button
+                        type="button"
+                        disabled={loadingTeachers}
+                        onClick={() => removeTeacherFromSession(item.id)}
+                        style={{
+                          border: "none",
+                          background: "transparent",
+                          color: "#b91c1c",
+                          fontWeight: 800,
+                          cursor: "pointer",
+                          fontSize: 14,
+                        }}
+                        title="Remover professor"
+                      >
+                        ×
+                      </button>
                     </div>
                   ))
                 )}
