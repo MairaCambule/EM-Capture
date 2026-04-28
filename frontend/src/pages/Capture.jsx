@@ -41,13 +41,13 @@ export default function Capture({ session }) {
 
   const [currentPhase, setCurrentPhase] = useState("during");
   const [confirmModal, setConfirmModal] = useState({
-  open: false,
-  title: "",
-  message: "",
-  confirmText: "",
-  action: null,
-  type: "default",
-});
+    open: false,
+    title: "",
+    message: "",
+    confirmText: "",
+    action: null,
+    type: "default",
+  });
 
 
   const [showStopConfirmModal, setShowStopConfirmModal] = useState(false);
@@ -103,24 +103,16 @@ export default function Capture({ session }) {
   const isModuleAdmin = moduleRole === "module_admin";
   const canViewAllRecords = isGlobalAdmin || isModuleAdmin;
 
-const isTeacher =
-  (profileData?.role || profile?.role)?.trim().toLowerCase() === "teacher";
 
-const baseRecords =
-  isTeacher
-    ? teacherRecords
-    : recordsView === "all" && canViewAllRecords
-    ? allRecords
-    : myRecords;
 
-    
-const filteredRecordsByArchive = baseRecords.filter((record) => {
-  if (recordsFilterMode === "active") return !record.is_archived;
-  if (recordsFilterMode === "archived") return !!record.is_archived;
-  return true;
-});
 
- 
+  const filteredRecordsByArchive = baseRecords.filter((record) => {
+    if (recordsFilterMode === "active") return !record.is_archived;
+    if (recordsFilterMode === "archived") return !!record.is_archived;
+    return true;
+  });
+
+
 
   const [pendingResumeRecord, setPendingResumeRecord] = useState(null);
 
@@ -157,17 +149,17 @@ const filteredRecordsByArchive = baseRecords.filter((record) => {
     currentSession?.user_id === currentUserId &&
     (currentSession?.status === "open" || currentSession?.status === "paused");
 
-const hasRequiredSessionData =
-  draftBox.trim() !== "" && draftPatientCode.trim() !== "";
+  const hasRequiredSessionData =
+    draftBox.trim() !== "" && draftPatientCode.trim() !== "";
 
-const canStartSessionFinal = canStartSession && hasRequiredSessionData;
+  const canStartSessionFinal = canStartSession && hasRequiredSessionData;
 
   const canSeeSessionClinic =
     isCurrentUserUsingCamera || isCurrentUserReserved;
 
   const [isPreparingSession, setIsPreparingSession] = useState(false);
 
-  
+
 
 
   useEffect(() => {
@@ -255,6 +247,16 @@ const canStartSessionFinal = canStartSession && hasRequiredSessionData;
         }
 
       }
+
+      const isTeacher =
+        (profileData?.role || profile?.role)?.trim().toLowerCase() === "teacher";
+
+      const baseRecords =
+        isTeacher
+          ? teacherRecords
+          : recordsView === "all" && canViewAllRecords
+            ? allRecords
+            : myRecords;
 
       const { data: moduleData, error: moduleError } = await supabase
         .from("user_module_access")
@@ -576,26 +578,26 @@ const canStartSessionFinal = canStartSession && hasRequiredSessionData;
   });
 
   function openConfirmModal({ title, message, confirmText, type, action }) {
-  setConfirmModal({
-    open: true,
-    title,
-    message,
-    confirmText,
-    type: type || "default",
-    action,
-  });
-}
+    setConfirmModal({
+      open: true,
+      title,
+      message,
+      confirmText,
+      type: type || "default",
+      action,
+    });
+  }
 
-function closeConfirmModal() {
-  setConfirmModal({
-    open: false,
-    title: "",
-    message: "",
-    confirmText: "",
-    action: null,
-    type: "default",
-  });
-}
+  function closeConfirmModal() {
+    setConfirmModal({
+      open: false,
+      title: "",
+      message: "",
+      confirmText: "",
+      action: null,
+      type: "default",
+    });
+  }
 
   function getStatusMeta(status) {
     switch (status) {
@@ -690,27 +692,27 @@ function closeConfirmModal() {
     return data;
   }
 
-async function apiGet(path) {
-  const {
-    data: { session: activeSession },
-  } = await supabase.auth.getSession();
+  async function apiGet(path) {
+    const {
+      data: { session: activeSession },
+    } = await supabase.auth.getSession();
 
-  const token = activeSession?.access_token;
+    const token = activeSession?.access_token;
 
-  if (!token) {
-    throw new Error("Sessão expirada. Faz login novamente.");
+    if (!token) {
+      throw new Error("Sessão expirada. Faz login novamente.");
+    }
+
+    const response = await axios.get(`${API_BASE_URL}${path}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    console.log("API GET RESPONSE:", path, response.data);
+
+    return response.data;
   }
-
-  const response = await axios.get(`${API_BASE_URL}${path}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  console.log("API GET RESPONSE:", path, response.data);
-
-  return response.data;
-}
 
 
   async function expireTurn() {
@@ -771,90 +773,90 @@ async function apiGet(path) {
     }
   }
 
-async function loadTeachers() {
-  try {
-    const data = await apiGet("/api/teachers");
-    setTeachers(data.teachers || []);
-  } catch (error) {
-    console.error("Erro ao carregar professores:", error);
-    setTeachers([]);
-  }
-}
-
-async function loadSessionTeachers(sessionId) {
-  try {
-    const data = await apiGet(`/api/session/${sessionId}/teachers`);
-    setSessionTeachers(data.teachers || []);
-  } catch (error) {
-    console.error("Erro ao carregar professores da sessão:", error);
-    setSessionTeachers([]);
-  }
-}
-
-async function assignTeacherToSession() {
-  if (!selectedRecord?.id || !selectedTeacherId) {
-    setMsg({
-      text: "Seleciona um professor antes de guardar.",
-      type: "warning",
-    });
-    return;
+  async function loadTeachers() {
+    try {
+      const data = await apiGet("/api/teachers");
+      setTeachers(data.teachers || []);
+    } catch (error) {
+      console.error("Erro ao carregar professores:", error);
+      setTeachers([]);
+    }
   }
 
-  try {
-    setLoadingTeachers(true);
+  async function loadSessionTeachers(sessionId) {
+    try {
+      const data = await apiGet(`/api/session/${sessionId}/teachers`);
+      setSessionTeachers(data.teachers || []);
+    } catch (error) {
+      console.error("Erro ao carregar professores da sessão:", error);
+      setSessionTeachers([]);
+    }
+  }
 
-    const data = await apiPost("/api/session/assign-teacher", {
-      sessionId: selectedRecord.id,
-      teacherUserId: selectedTeacherId,
-    });
-
-    if (data?.assigned) {
+  async function assignTeacherToSession() {
+    if (!selectedRecord?.id || !selectedTeacherId) {
       setMsg({
-        text: "Professor associado ao registo com sucesso.",
-        type: "success",
+        text: "Seleciona um professor antes de guardar.",
+        type: "warning",
+      });
+      return;
+    }
+
+    try {
+      setLoadingTeachers(true);
+
+      const data = await apiPost("/api/session/assign-teacher", {
+        sessionId: selectedRecord.id,
+        teacherUserId: selectedTeacherId,
       });
 
-      setSelectedTeacherId("");
-      await loadSessionTeachers(selectedRecord.id);
-    }
-  } catch (error) {
-    console.error("ASSIGN TEACHER ERROR:", error);
-    setMsg({
-      text: error.message || "Erro ao associar professor.",
-      type: "warning",
-    });
-  } finally {
-    setLoadingTeachers(false);
-  }
-}
+      if (data?.assigned) {
+        setMsg({
+          text: "Professor associado ao registo com sucesso.",
+          type: "success",
+        });
 
-
-async function removeTeacherFromSession(accessId) {
-  try {
-    setLoadingTeachers(true);
-
-    const data = await apiPost("/api/session/remove-teacher", {
-      accessId,
-    });
-
-    if (data?.removed) {
+        setSelectedTeacherId("");
+        await loadSessionTeachers(selectedRecord.id);
+      }
+    } catch (error) {
+      console.error("ASSIGN TEACHER ERROR:", error);
       setMsg({
-        text: "Professor removido do registo.",
-        type: "success",
+        text: error.message || "Erro ao associar professor.",
+        type: "warning",
+      });
+    } finally {
+      setLoadingTeachers(false);
+    }
+  }
+
+
+  async function removeTeacherFromSession(accessId) {
+    try {
+      setLoadingTeachers(true);
+
+      const data = await apiPost("/api/session/remove-teacher", {
+        accessId,
       });
 
-      await loadSessionTeachers(selectedRecord.id);
+      if (data?.removed) {
+        setMsg({
+          text: "Professor removido do registo.",
+          type: "success",
+        });
+
+        await loadSessionTeachers(selectedRecord.id);
+      }
+    } catch (error) {
+      console.error("REMOVE TEACHER ERROR:", error);
+      setMsg({
+        text: error.message || "Erro ao remover professor.",
+        type: "warning",
+      });
+    } finally {
+      setLoadingTeachers(false);
     }
-  } catch (error) {
-    console.error("REMOVE TEACHER ERROR:", error);
-    setMsg({
-      text: error.message || "Erro ao remover professor.",
-      type: "warning",
-    });
-  } finally {
-    setLoadingTeachers(false);
   }
-}
 
   useEffect(() => {
     if (!session?.access_token) return;
@@ -1019,36 +1021,36 @@ async function removeTeacherFromSession(accessId) {
   }
 
 
-async function startSession() {
-  try {
-    setMsg("");
+  async function startSession() {
+    try {
+      setMsg("");
 
-    const data = await apiPost("/api/session/start", {
-      cameraId: CAMERA_ID,
-      patientCode: draftPatientCode,
-      box: draftBox,
-    });
-
-    if (data.started) {
-      setMsg({
-        text: "Sessão iniciada com sucesso.",
-        type: "success",
+      const data = await apiPost("/api/session/start", {
+        cameraId: CAMERA_ID,
+        patientCode: draftPatientCode,
+        box: draftBox,
       });
 
-      setDraftBox("");
-      setDraftPatientCode("");
-      setShowTurnModal(false);
+      if (data.started) {
+        setMsg({
+          text: "Sessão iniciada com sucesso.",
+          type: "success",
+        });
 
-      await loadData();
+        setDraftBox("");
+        setDraftPatientCode("");
+        setShowTurnModal(false);
+
+        await loadData();
+      }
+    } catch (error) {
+      console.error("START SESSION ERROR:", error);
+      setMsg({
+        text: error.message,
+        type: "warning",
+      });
     }
-  } catch (error) {
-    console.error("START SESSION ERROR:", error);
-    setMsg({
-      text: error.message,
-      type: "warning",
-    });
   }
-}
 
   async function pauseSession() {
     setMsg("");
@@ -1228,40 +1230,40 @@ async function startSession() {
     return data.signedUrl;
   }
 
-async function openRecordModal(record) {
-  setSelectedRecord(record);
+  async function openRecordModal(record) {
+    setSelectedRecord(record);
 
-  const { data: recordPhotos, error } = await supabase
-    .from("session_photos")
-    .select("*")
-    .eq("session_id", record.id)
-    .order("captured_at", { ascending: false });
+    const { data: recordPhotos, error } = await supabase
+      .from("session_photos")
+      .select("*")
+      .eq("session_id", record.id)
+      .order("captured_at", { ascending: false });
 
-  if (error) {
-    console.error("Erro ao carregar fotos do registo:", error);
-    setSelectedRecordPhotos([]);
-    setPhotoPreviewMap({});
-  } else {
-    const photos = recordPhotos || [];
-    setSelectedRecordPhotos(photos);
+    if (error) {
+      console.error("Erro ao carregar fotos do registo:", error);
+      setSelectedRecordPhotos([]);
+      setPhotoPreviewMap({});
+    } else {
+      const photos = recordPhotos || [];
+      setSelectedRecordPhotos(photos);
 
-    const previewEntries = await Promise.all(
-      photos.map(async (photo) => {
-        const url = await getSignedPhotoUrl(photo.storage_path);
-        return [photo.id, url];
-      })
-    );
+      const previewEntries = await Promise.all(
+        photos.map(async (photo) => {
+          const url = await getSignedPhotoUrl(photo.storage_path);
+          return [photo.id, url];
+        })
+      );
 
-    const previewMap = Object.fromEntries(previewEntries);
-    setPhotoPreviewMap(previewMap);
+      const previewMap = Object.fromEntries(previewEntries);
+      setPhotoPreviewMap(previewMap);
+    }
+
+    // 👉 NOVO
+    await loadTeachers();
+    await loadSessionTeachers(record.id);
+
+    setIsRecordModalOpen(true);
   }
-
-  // 👉 NOVO
-  await loadTeachers();
-  await loadSessionTeachers(record.id);
-
-  setIsRecordModalOpen(true);
-}
 
   async function updatePhase(phase) {
     try {
@@ -2109,36 +2111,36 @@ async function openRecordModal(record) {
             }}
           >
             <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-  <button
-    type="button"
-    onClick={() => setRecordsFilterMode("active")}
-    style={{
-      opacity: recordsFilterMode === "active" ? 1 : 0.7,
-    }}
-  >
-    Ativos
-  </button>
+              <button
+                type="button"
+                onClick={() => setRecordsFilterMode("active")}
+                style={{
+                  opacity: recordsFilterMode === "active" ? 1 : 0.7,
+                }}
+              >
+                Ativos
+              </button>
 
-  <button
-    type="button"
-    onClick={() => setRecordsFilterMode("archived")}
-    style={{
-      opacity: recordsFilterMode === "archived" ? 1 : 0.7,
-    }}
-  >
-    Arquivados
-  </button>
+              <button
+                type="button"
+                onClick={() => setRecordsFilterMode("archived")}
+                style={{
+                  opacity: recordsFilterMode === "archived" ? 1 : 0.7,
+                }}
+              >
+                Arquivados
+              </button>
 
-  <button
-    type="button"
-    onClick={() => setRecordsFilterMode("all")}
-    style={{
-      opacity: recordsFilterMode === "all" ? 1 : 0.7,
-    }}
-  >
-    Todos
-  </button>
-</div>
+              <button
+                type="button"
+                onClick={() => setRecordsFilterMode("all")}
+                style={{
+                  opacity: recordsFilterMode === "all" ? 1 : 0.7,
+                }}
+              >
+                Todos
+              </button>
+            </div>
 
             <div>
               <h2 style={{ margin: 0, color: "#1e4a8d", fontSize: "1.7rem" }}>
