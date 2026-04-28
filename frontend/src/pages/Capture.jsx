@@ -2420,11 +2420,18 @@ async function openRecordModal(record) {
                 )}
               </div>
 
-              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
                 <select
                   value={selectedTeacherId}
                   onChange={(e) => setSelectedTeacherId(e.target.value)}
-                  style={{ flex: 1 }}
+                  style={{
+                    flex: 1,
+                    padding: "10px 12px",
+                    borderRadius: 10,
+                    border: "1px solid #dbe3ec",
+                    background: "#fff",
+                    fontSize: 14,
+                  }}
                 >
                   <option value="">Selecionar professor</option>
                   {teachers.map((teacher) => (
@@ -2438,6 +2445,16 @@ async function openRecordModal(record) {
                   type="button"
                   disabled={!selectedTeacherId || loadingTeachers}
                   onClick={assignTeacherToSession}
+                  style={{
+                    padding: "10px 16px",
+                    borderRadius: 10,
+                    border: "none",
+                    background: "#1e4a8d",
+                    color: "#fff",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    opacity: !selectedTeacherId || loadingTeachers ? 0.6 : 1,
+                  }}
                 >
                   {loadingTeachers ? "A associar..." : "Associar"}
                 </button>
