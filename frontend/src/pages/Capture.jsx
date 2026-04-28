@@ -35,6 +35,7 @@ export default function Capture({ session }) {
   const [sessionTeachers, setSessionTeachers] = useState([]);
   const [loadingTeachers, setLoadingTeachers] = useState(false);
   const [loadingId, setLoadingId] = useState(null);
+  const [teacherRecords, setTeacherRecords] = useState([]);
 
   const [currentPhase, setCurrentPhase] = useState("during");
   const [confirmModal, setConfirmModal] = useState({
@@ -101,7 +102,11 @@ export default function Capture({ session }) {
   const canViewAllRecords = isGlobalAdmin || isModuleAdmin;
 
   const baseRecords =
-  recordsView === "all" && canViewAllRecords ? allRecords : myRecords;
+  profile?.role === "teacher"
+    ? teacherRecords
+    : recordsView === "all" && canViewAllRecords
+    ? allRecords
+    : myRecords; 
 
 const filteredRecordsByArchive = baseRecords.filter((record) => {
   if (recordsFilterMode === "active") return !record.is_archived;
@@ -219,7 +224,49 @@ const canStartSessionFinal = canStartSession && hasRequiredSessionData;
         console.error("Erro ao carregar profile:", profileError);
       } else {
         setProfile(profileData);
+        
       }
+      if (profileData?.role === "teacher") {
+  const { data: accessData, error: accessError } = await supabase
+    .from("session_record_access")
+    .select("session_id")
+    .eq("teacher_user_id", currentUserId);
+
+  if (accessError) {
+    console.error("Erro ao carregar acessos do professor:", accessError);
+    setTeacherRecords([]);
+  } else {
+    const sessionIds = (accessData || []).map((item) => item.session_id);
+
+    if (sessionIds.length === 0) {
+      setTeacherRecords([]);
+    } else {
+      const { data: teacherSessionsData, error: teacherSessionsError } =
+        await supabase
+          .from("clinical_sessions")
+          .select("*")
+          .in("id", sessionIds)
+          .order("started_at", { ascending: false });
+
+      if (teacherSessionsError) {
+        console.error(
+          "Erro ao carregar registos do professor:",
+          teacherSessionsError
+        );
+        setTeacherRecords([]);
+      } else {
+        const records = (teacherSessionsData || []).map((sessionItem) => ({
+          ...sessionItem,
+          user_name:
+            localProfilesMap[sessionItem.user_id] || sessionItem.user_id,
+          photos_count: 0,
+        }));
+
+        setTeacherRecords(records);
+      }
+    }
+  }
+}
 
       const { data: moduleData, error: moduleError } = await supabase
         .from("user_module_access")
@@ -2239,7 +2286,7 @@ async function openRecordModal(record) {
                           </div>
                         )}
 
-                        {!record.is_archived && (
+                        {!record.is_archived && profile?.role !== "teacher" && (
                           <button
                             type="button"
                             disabled={recordActionLoadingId === record.id}
