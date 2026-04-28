@@ -2393,19 +2393,6 @@ async function openRecordModal(record) {
                 Professores com acesso
               </h3>
 
-              {sessionTeachers.map((item) => (
-                <div
-                  key={item.id}
-                  style={{
-                    padding: "8px 12px",
-                    borderRadius: 8,
-                    background: "#f1f5f9",
-                    marginBottom: 6,
-                  }}
-                >
-                  {item.teacher?.full_name || item.teacher_user_id}
-                </div>
-              ))}
 
               {/* Selecionar professor */}
               <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
