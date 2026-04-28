@@ -37,7 +37,7 @@ export default function Capture({ session }) {
   const [loadingId, setLoadingId] = useState(null);
   const [teacherRecords, setTeacherRecords] = useState([]);
 
-  const [teacherRecords, setTeacherRecords] = useState([]);
+  //const [teacherRecords, setTeacherRecords] = useState([]);
 
   const [currentPhase, setCurrentPhase] = useState("during");
   const [confirmModal, setConfirmModal] = useState({
