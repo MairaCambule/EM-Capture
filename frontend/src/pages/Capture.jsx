@@ -37,6 +37,8 @@ export default function Capture({ session }) {
   const [loadingId, setLoadingId] = useState(null);
   const [teacherRecords, setTeacherRecords] = useState([]);
 
+  const [teacherRecords, setTeacherRecords] = useState([]);
+
   const [currentPhase, setCurrentPhase] = useState("during");
   const [confirmModal, setConfirmModal] = useState({
   open: false,
@@ -224,9 +226,7 @@ const canStartSessionFinal = canStartSession && hasRequiredSessionData;
         console.error("Erro ao carregar profile:", profileError);
       } else {
         setProfile(profileData);
-        
-      }
-      if (profileData?.role === "teacher") {
+        if (profileData?.role === "teacher") {
   const { data: accessData, error: accessError } = await supabase
     .from("session_record_access")
     .select("session_id")
@@ -249,17 +249,27 @@ const canStartSessionFinal = canStartSession && hasRequiredSessionData;
           .order("started_at", { ascending: false });
 
       if (teacherSessionsError) {
-        console.error(
-          "Erro ao carregar registos do professor:",
-          teacherSessionsError
-        );
+        console.error("Erro ao carregar registos do professor:", teacherSessionsError);
         setTeacherRecords([]);
       } else {
+        const teacherSessionIds = (teacherSessionsData || []).map((s) => s.id);
+
+        const { data: teacherPhotosData } = await supabase
+          .from("session_photos")
+          .select("session_id, id")
+          .in("session_id", teacherSessionIds);
+
+        const photoCountMap = {};
+        (teacherPhotosData || []).forEach((photo) => {
+          photoCountMap[photo.session_id] =
+            (photoCountMap[photo.session_id] || 0) + 1;
+        });
+
         const records = (teacherSessionsData || []).map((sessionItem) => ({
           ...sessionItem,
           user_name:
             localProfilesMap[sessionItem.user_id] || sessionItem.user_id,
-          photos_count: 0,
+          photos_count: photoCountMap[sessionItem.id] || 0,
         }));
 
         setTeacherRecords(records);
@@ -267,7 +277,9 @@ const canStartSessionFinal = canStartSession && hasRequiredSessionData;
     }
   }
 }
-
+        
+      }
+  
       const { data: moduleData, error: moduleError } = await supabase
         .from("user_module_access")
         .select(`
