@@ -238,9 +238,9 @@ const loadData = useCallback(async () => {
     } else {
       setProfile(profileData);
 
-      loadedProfileRole = (profileData?.role || "user").trim().toLowerCase();
-      isTeacher = loadedProfileRole === "teacher";
-      isGlobalAdmin = loadedProfileRole === "global_admin";
+     const loadedProfileRole = (profileData?.role || "user").trim().toLowerCase();
+     const isTeacher = loadedProfileRole === "teacher";
+      const isGlobalAdmin = loadedProfileRole === "global_admin";
 
       console.log("ROLE CARREGADA:", loadedProfileRole);
       console.log("IS TEACHER:", isTeacher);
