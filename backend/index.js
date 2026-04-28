@@ -943,6 +943,73 @@ app.post("/api/session/remove-teacher", requireAuth, async (req, res) => {
 });
 
 
+app.get("/api/teacher/records", requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const { data: accessRows, error: accessError } = await supabaseAdmin
+      .from("session_record_access")
+      .select("session_id")
+      .eq("teacher_user_id", userId);
+
+    if (accessError) {
+      return res.status(400).json({ error: accessError.message });
+    }
+
+    const sessionIds = (accessRows || []).map((row) => row.session_id);
+
+    if (sessionIds.length === 0) {
+      return res.json({ records: [] });
+    }
+
+    const { data: sessions, error: sessionsError } = await supabaseAdmin
+      .from("clinical_sessions")
+      .select("*")
+      .in("id", sessionIds)
+      .order("started_at", { ascending: false });
+
+    if (sessionsError) {
+      return res.status(400).json({ error: sessionsError.message });
+    }
+
+    const userIds = [...new Set((sessions || []).map((s) => s.user_id))];
+
+    const { data: profiles } = await supabaseAdmin
+      .from("profiles")
+      .select("id, full_name")
+      .in("id", userIds);
+
+    const profilesMap = {};
+    (profiles || []).forEach((p) => {
+      profilesMap[p.id] = p.full_name || p.id;
+    });
+
+    const sessionIdsForPhotos = (sessions || []).map((s) => s.id);
+
+    const { data: photos } = await supabaseAdmin
+      .from("session_photos")
+      .select("session_id, id")
+      .in("session_id", sessionIdsForPhotos);
+
+    const photoCountMap = {};
+    (photos || []).forEach((photo) => {
+      photoCountMap[photo.session_id] =
+        (photoCountMap[photo.session_id] || 0) + 1;
+    });
+
+    const records = (sessions || []).map((session) => ({
+      ...session,
+      user_name: profilesMap[session.user_id] || session.user_id,
+      photos_count: photoCountMap[session.id] || 0,
+    }));
+
+    return res.json({ records });
+  } catch (err) {
+    console.error("GET TEACHER RECORDS ERROR:", err);
+    return res.status(500).json({ error: "Erro ao carregar registos do professor." });
+  }
+});
+
 
 app.post("/api/session/archive", requireAuth, async (req, res) => {
   try {
