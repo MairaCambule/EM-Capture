@@ -226,6 +226,7 @@ const canStartSessionFinal = canStartSession && hasRequiredSessionData;
         console.error("Erro ao carregar profile:", profileError);
       } else {
         setProfile(profileData);
+        if (profileData?.role?.trim().toLowerCase() === "teacher") {
         if (profileData?.role === "teacher") {
           try {
             const data = await apiGet("/api/teacher/records");
@@ -236,6 +237,7 @@ const canStartSessionFinal = canStartSession && hasRequiredSessionData;
             setTeacherRecords([]);
           }
         }
+      }
 
       }
 
