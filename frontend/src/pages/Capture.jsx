@@ -2389,39 +2389,44 @@ async function openRecordModal(record) {
               </div>
             </div>
             <div style={{ marginTop: 24 }}>
-              <h3 style={{ color: "#17324d", marginBottom: 12 }}>
+              <h3 style={{ color: "#1e4a8d", marginBottom: 12 }}>
                 Professores com acesso
               </h3>
 
-
-              {/* Selecionar professor */}
-              <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
+              <div style={{ marginBottom: 14 }}>
                 {sessionTeachers.length === 0 ? (
-                  <p style={{ color: "#5f6b7a" }}>
-                    Nenhum professor associado.
+                  <p style={{ color: "#5f6b7a", margin: 0 }}>
+                    Nenhum professor associado a este registo.
                   </p>
                 ) : (
                   sessionTeachers.map((item) => (
                     <div
                       key={item.id}
                       style={{
+                        display: "inline-flex",
+                        alignItems: "center",
                         padding: "8px 12px",
-                        borderRadius: 8,
+                        borderRadius: 10,
                         background: "#f1f5f9",
-                        marginBottom: 6,
+                        color: "#17324d",
+                        fontWeight: 600,
+                        marginRight: 8,
+                        marginBottom: 8,
                       }}
                     >
                       {item.teacher?.full_name || item.teacher_user_id}
                     </div>
                   ))
                 )}
+              </div>
+
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                 <select
                   value={selectedTeacherId}
                   onChange={(e) => setSelectedTeacherId(e.target.value)}
                   style={{ flex: 1 }}
                 >
                   <option value="">Selecionar professor</option>
-
                   {teachers.map((teacher) => (
                     <option key={teacher.id} value={teacher.id}>
                       {teacher.full_name}
