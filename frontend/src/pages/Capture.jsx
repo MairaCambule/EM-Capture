@@ -102,9 +102,9 @@ export default function Capture({ session }) {
 
   const isModuleAdmin = moduleRole === "module_admin";
   const canViewAllRecords = isGlobalAdmin || isModuleAdmin;
-
-  const baseRecords =
-  profile?.role === "teacher"
+  
+const baseRecords =
+  profile?.role?.trim().toLowerCase() === "teacher"
     ? teacherRecords
     : recordsView === "all" && canViewAllRecords
     ? allRecords
@@ -227,7 +227,7 @@ const canStartSessionFinal = canStartSession && hasRequiredSessionData;
       } else {
         setProfile(profileData);
         if (profileData?.role?.trim().toLowerCase() === "teacher") {
-        if (profileData?.role === "teacher") {
+        //if (profileData?.role === "teacher") {
           try {
             const data = await apiGet("/api/teacher/records");
             console.log("TEACHER RECORDS:", data);
@@ -236,7 +236,7 @@ const canStartSessionFinal = canStartSession && hasRequiredSessionData;
             console.error("Erro ao carregar registos do professor:", error);
             setTeacherRecords([]);
           }
-        }
+        
       }
 
       }
