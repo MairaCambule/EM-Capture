@@ -888,6 +888,62 @@ app.get("/api/session/:sessionId/teachers", requireAuth, async (req, res) => {
   }
 });
 
+app.post("/api/session/remove-teacher", requireAuth, async (req, res) => {
+  try {
+    const { accessId } = req.body;
+    const userId = req.user.id;
+
+    if (!accessId) {
+      return res.status(400).json({ error: "accessId é obrigatório." });
+    }
+
+    const { data: accessRow, error: accessError } = await supabaseAdmin
+      .from("session_record_access")
+      .select("id, session_id")
+      .eq("id", accessId)
+      .single();
+
+    if (accessError || !accessRow) {
+      return res.status(404).json({ error: "Acesso não encontrado." });
+    }
+
+    const { data: sessionData, error: sessionError } = await supabaseAdmin
+      .from("clinical_sessions")
+      .select("id, user_id")
+      .eq("id", accessRow.session_id)
+      .single();
+
+    if (sessionError || !sessionData) {
+      return res.status(404).json({ error: "Sessão não encontrada." });
+    }
+
+    const isAdmin = await canAdminEmCapture(userId);
+    const isOwner = sessionData.user_id === userId;
+
+    if (!isAdmin && !isOwner) {
+      return res.status(403).json({
+        error: "Sem permissão para remover este professor.",
+      });
+    }
+
+    const { error: deleteError } = await supabaseAdmin
+      .from("session_record_access")
+      .delete()
+      .eq("id", accessId);
+
+    if (deleteError) {
+      return res.status(400).json({ error: deleteError.message });
+    }
+
+    return res.json({ removed: true });
+  } catch (err) {
+    console.error("REMOVE TEACHER ERROR:", err);
+    return res.status(500).json({ error: "Erro ao remover professor." });
+  }
+});
+
+
+
 app.post("/api/session/archive", requireAuth, async (req, res) => {
   try {
     const { sessionId } = req.body;
