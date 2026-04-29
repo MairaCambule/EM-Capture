@@ -2214,7 +2214,7 @@ export default function Capture({ session }) {
                   className={recordsView === "assigned" ? "primary-btn" : "soft-btn"}
                   onClick={() => setRecordsView("assigned")}
                 >
-                  Registos 
+                  Registos Teacher
                 </button>
               )}
 
