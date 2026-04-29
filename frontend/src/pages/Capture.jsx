@@ -104,15 +104,19 @@ export default function Capture({ session }) {
   const canViewAllRecords = isGlobalAdmin || isModuleAdmin;
 
 
-const isTeacher =
-  profile?.role?.trim().toLowerCase() === "teacher";
+  const isTeacher =
+    profile?.role?.trim().toLowerCase() === "teacher";
 
-const baseRecords =
-  isTeacher && recordsView === "assigned"
-    ? teacherRecords
-    : recordsView === "all" && canViewAllRecords
-    ? allRecords
-    : myRecords;
+  const baseRecords =
+    isTeacher && recordsView === "assigned"
+      ? teacherRecords
+      : recordsView === "all" && canViewAllRecords
+        ? allRecords
+        : myRecords;
+
+  console.log("BASE RECORDS:", baseRecords);
+  console.log("TEACHER RECORDS:", teacherRecords);
+  console.log("VIEW:", recordsView);
 
   const filteredRecordsByArchive = baseRecords.filter((record) => {
     if (recordsFilterMode === "active") return !record.is_archived;
@@ -255,7 +259,13 @@ const loadData = useCallback(async () => {
           console.log("TEACHER RECORDS:", response.data);
 
           const records = response.data?.records || [];
-          setTeacherRecords(Array.isArray(records) ? records : []);
+          const normalized = (Array.isArray(records) ? records : []).map((r) => ({
+            ...r,
+            user_name: r.user_name || r.full_name || "—",
+            name: r.name || r.full_name || "—",
+          }));
+
+          setTeacherRecords(normalized);
         } catch (error) {
           console.error("Erro ao carregar registos do professor:", error);
           setTeacherRecords([]);
