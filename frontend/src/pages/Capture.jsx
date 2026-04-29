@@ -104,16 +104,15 @@ export default function Capture({ session }) {
   const canViewAllRecords = isGlobalAdmin || isModuleAdmin;
 
 
-  const isTeacher =
-    (profile?.role || "").trim().toLowerCase() === "teacher";
+const isTeacher =
+  profile?.role?.trim().toLowerCase() === "teacher";
 
-  const baseRecords =
-    isTeacher
-      ? teacherRecords
-      : recordsView === "all" && canViewAllRecords
-        ? allRecords
-        : myRecords;
-
+const baseRecords =
+  isTeacher && recordsView === "assigned"
+    ? teacherRecords
+    : recordsView === "all" && canViewAllRecords
+    ? allRecords
+    : myRecords;
 
   const filteredRecordsByArchive = baseRecords.filter((record) => {
     if (recordsFilterMode === "active") return !record.is_archived;
@@ -2149,7 +2148,7 @@ const loadData = useCallback(async () => {
                     : "Meus registos"}
               </h2>
               <p style={{ color: "#5f6b7a", margin: "8px 0 0" }}>
-                {isTeacher
+                {isTeacher && recordsView === "assigned"
                   ? "Consulta dos registos clínicos aos quais tens acesso."
                   : recordsView === "all"
                     ? "Consulta global dos registos do módulo."
@@ -2164,6 +2163,15 @@ const loadData = useCallback(async () => {
               >
                 Meus registos
               </button>
+
+              {isTeacher && (
+                <button
+                  className={recordsView === "assigned" ? "primary-btn" : "soft-btn"}
+                  onClick={() => setRecordsView("assigned")}
+                >
+                  Registos atribuídos
+                </button>
+              )}
 
               {canViewAllRecords && (
                 <button
