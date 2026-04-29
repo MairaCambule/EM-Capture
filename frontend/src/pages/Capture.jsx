@@ -118,46 +118,60 @@ export default function Capture({ session }) {
   console.log("TEACHER RECORDS:", teacherRecords);
   console.log("VIEW:", recordsView);
 
-  const filteredRecords = filteredRecordsByArchive.filter((record) => {
-    const recordDate = record.started_at
-      ? new Date(record.started_at).toISOString().slice(0, 10)
-      : "";
+const filteredRecordsByArchive = baseRecords.filter((record) => {
+  const isArchived = record.is_archived === true;
 
-    const matchesDate = !filterDate || recordDate === filterDate;
+  if (recordsFilterMode === "active") return !isArchived;
+  if (recordsFilterMode === "archived") return isArchived;
 
-    const matchesName =
-      !filterName ||
-      (record.user_name || "")
-        .toLowerCase()
-        .includes(filterName.toLowerCase());
+  return true;
+});
 
-    const matchesPatient =
-      !filterPatientCode ||
-      (record.patient_code || "")
-        .toLowerCase()
-        .includes(filterPatientCode.toLowerCase());
+const filteredRecords = filteredRecordsByArchive.filter((record) => {
+  const recordDate = record.started_at
+    ? new Date(record.started_at).toISOString().slice(0, 10)
+    : "";
 
-    const matchesBox =
-      !filterBox ||
-      (record.box || "")
-        .toLowerCase()
-        .includes(filterBox.toLowerCase());
+  const matchesDate = !filterDate || recordDate === filterDate;
 
-    const matchesStatus =
-      !filterStatus ||
-      (record.status || "")
-        .toLowerCase()
-        .includes(filterStatus.toLowerCase());
+  const matchesName =
+    !filterName ||
+    String(record.user_name || "")
+      .toLowerCase()
+      .includes(filterName.toLowerCase());
 
-    return (
-      matchesDate &&
-      matchesName &&
-      matchesPatient &&
-      matchesBox &&
-      matchesStatus
-    );
-  });
+  const matchesPatient =
+    !filterPatientCode ||
+    String(record.patient_code || "")
+      .toLowerCase()
+      .includes(filterPatientCode.toLowerCase());
 
+  const matchesBox =
+    !filterBox ||
+    String(record.box || "")
+      .toLowerCase()
+      .includes(filterBox.toLowerCase());
+
+  const matchesStatus =
+    !filterStatus ||
+    String(formatSessionStatus(record.status) || "")
+      .toLowerCase()
+      .includes(filterStatus.toLowerCase());
+
+  return (
+    matchesDate &&
+    matchesName &&
+    matchesPatient &&
+    matchesBox &&
+    matchesStatus
+  );
+});
+
+console.log("BASE RECORDS:", baseRecords);
+console.log("TEACHER RECORDS:", teacherRecords);
+console.log("VIEW:", recordsView);
+console.log("FILTERED BY ARCHIVE:", filteredRecordsByArchive);
+console.log("FILTERED FINAL:", filteredRecords);
 
 
   const [pendingResumeRecord, setPendingResumeRecord] = useState(null);
@@ -584,41 +598,9 @@ export default function Capture({ session }) {
   const activeRecordsSource =
     recordsView === "all" && canViewAllRecords ? allRecords : myRecords;
 
-  const filteredRecords = activeRecordsSource.filter((record) => {
-    const matchesDate = filterDate
-      ? (record.started_at || "").slice(0, 10) === filterDate
-      : true;
 
-    const matchesName = filterName
-      ? (record.user_name || "").toLowerCase().includes(filterName.toLowerCase())
-      : true;
 
-    const matchesPatientCode = filterPatientCode
-      ? (record.patient_code || "")
-        .toLowerCase()
-        .includes(filterPatientCode.toLowerCase())
-      : true;
-
-    const matchesBox = filterBox
-      ? (record.box || "").toLowerCase().includes(filterBox.toLowerCase())
-      : true;
-
-    const matchesStatus = filterStatus
-      ? formatSessionStatus(record.status)
-        .toLowerCase()
-        .includes(filterStatus.toLowerCase())
-      : true;
-
-    return (
-      matchesDate &&
-      matchesName &&
-      matchesPatientCode &&
-      matchesBox &&
-      matchesStatus
-    );
-  });
-
-  console.log("FILTER MODE:", recordsFilterMode);
+  console.log("FILTER MODE TESTE:", recordsFilterMode);
   console.log("FILTERED BY ARCHIVE:", filteredRecordsByArchive);
   console.log("FILTERED FINAL:", filteredRecords);
 
@@ -2291,7 +2273,7 @@ export default function Capture({ session }) {
                 </tr>
               </thead>
               <tbody>
-                {filteredRecordsByArchive.map((record) => (
+                {filteredRecords.map((record) => (
                   <tr key={record.id}>
                     <td>
                       {record.started_at
