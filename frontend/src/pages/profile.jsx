@@ -125,7 +125,7 @@ export default function Profile() {
             cursor: "pointer",
           }}
         >
-          ← Voltar ao EM Capture
+          ← Voltar ao EM Capturee
         </button>
 
         <h1 style={{ color: "#1e4a8d", marginBottom: 8 }}>Meu perfil</h1>
