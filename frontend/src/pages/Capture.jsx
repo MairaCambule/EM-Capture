@@ -2307,7 +2307,7 @@ console.log("FILTERED FINAL:", filteredRecords);
                           </div>
                         )}
 
-                        {!record.is_archived && !isTeacher && (
+                        {!record.is_archived && !(isTeacher && recordsView === "assigned") && (
                           <button
                             type="button"
                             disabled={recordActionLoadingId === record.id}
@@ -2326,7 +2326,7 @@ console.log("FILTERED FINAL:", filteredRecords);
                           </button>
                         )}
 
-                        {record.is_archived && canViewAllRecords && !isTeacher && (
+                        {record.is_archived && canViewAllRecords && (
                           <>
                             <button
                               type="button"
