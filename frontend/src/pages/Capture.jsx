@@ -2142,12 +2142,18 @@ const loadData = useCallback(async () => {
 
             <div>
               <h2 style={{ margin: 0, color: "#1e4a8d", fontSize: "1.7rem" }}>
-                {recordsView === "all" ? "Todos os registos" : "Meus registos"}
+                {isTeacher
+                  ? "Registos atribuídos"
+                  : recordsView === "all"
+                    ? "Todos os registos"
+                    : "Meus registos"}
               </h2>
-              <p style={{ color: "#5f6b7a", margin: "8px 0 0 0" }}>
-                {recordsView === "all"
-                  ? "Consulta global dos registos do módulo."
-                  : "Consulta das tuas sessões clínicas e respetivas fotografias."}
+              <p style={{ color: "#5f6b7a", margin: "8px 0 0" }}>
+                {isTeacher
+                  ? "Consulta dos registos clínicos aos quais tens acesso."
+                  : recordsView === "all"
+                    ? "Consulta global dos registos do módulo."
+                    : "Consulta das tuas sessões clínicas e respetivas fotografias."}
               </p>
             </div>
 
@@ -2263,7 +2269,7 @@ const loadData = useCallback(async () => {
                           </div>
                         )}
 
-                        {!record.is_archived && profile?.role !== "teacher" && (
+                        {!record.is_archived && !isTeacher && (
                           <button
                             type="button"
                             disabled={recordActionLoadingId === record.id}
@@ -2282,7 +2288,7 @@ const loadData = useCallback(async () => {
                           </button>
                         )}
 
-                        {record.is_archived && canViewAllRecords && (
+                        {record.is_archived && canViewAllRecords && !isTeacher && (
                           <>
                             <button
                               type="button"
