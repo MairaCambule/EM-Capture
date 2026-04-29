@@ -1435,7 +1435,7 @@ export default function Capture({ session }) {
 
         <button
           type="button"
-          onClick={() => navigate("/app/profile")}
+          onClick={() => navigate("/app/Profile")}
           style={{
             background: "#eef4fb",
             color: "#1e4a8d",
