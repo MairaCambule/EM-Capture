@@ -972,7 +972,13 @@ app.get("/api/teacher/records", requireAuth, async (req, res) => {
       return res.status(400).json({ error: sessionsError.message });
     }
 
-    const userIds = [...new Set((sessions || []).map((s) => s.user_id))];
+    const userIds = [
+      ...new Set(
+        (sessions || [])
+          .flatMap((s) => [s.user_id, s.archived_by_user_id])
+          .filter(Boolean)
+      ),
+    ];
 
     const { data: profiles } = await supabaseAdmin
       .from("profiles")
@@ -1000,6 +1006,8 @@ app.get("/api/teacher/records", requireAuth, async (req, res) => {
     const records = (sessions || []).map((session) => ({
       ...session,
       user_name: profilesMap[session.user_id] || session.user_id,
+      archived_by_name:
+        profilesMap[session.archived_by_user_id] || session.archived_by_user_id || null,
       photos_count: photoCountMap[session.id] || 0,
     }));
 
@@ -1010,6 +1018,54 @@ app.get("/api/teacher/records", requireAuth, async (req, res) => {
   }
 });
 
+
+app.get("/api/session/:sessionId/photos", requireAuth, async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const userId = req.user.id;
+
+    const { data: sessionData, error: sessionError } = await supabaseAdmin
+      .from("clinical_sessions")
+      .select("id, user_id")
+      .eq("id", sessionId)
+      .single();
+
+    if (sessionError || !sessionData) {
+      return res.status(404).json({ error: "Sessão não encontrada." });
+    }
+
+    const isOwner = sessionData.user_id === userId;
+    const isAdmin = await canAdminEmCapture(userId);
+
+    const { data: accessRow } = await supabaseAdmin
+      .from("session_record_access")
+      .select("id")
+      .eq("session_id", sessionId)
+      .eq("teacher_user_id", userId)
+      .maybeSingle();
+
+    const hasTeacherAccess = !!accessRow;
+
+    if (!isOwner && !isAdmin && !hasTeacherAccess) {
+      return res.status(403).json({ error: "Sem acesso a este registo." });
+    }
+
+    const { data: photos, error: photosError } = await supabaseAdmin
+      .from("session_photos")
+      .select("*")
+      .eq("session_id", sessionId)
+      .order("captured_at", { ascending: false });
+
+    if (photosError) {
+      return res.status(400).json({ error: photosError.message });
+    }
+
+    return res.json({ photos: photos || [] });
+  } catch (err) {
+    console.error("GET SESSION PHOTOS ERROR:", err);
+    return res.status(500).json({ error: "Erro ao carregar fotografias." });
+  }
+});
 
 app.post("/api/session/archive", requireAuth, async (req, res) => {
   try {

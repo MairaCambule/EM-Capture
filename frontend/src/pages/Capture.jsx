@@ -1260,11 +1260,9 @@ console.log("FILTERED FINAL:", filteredRecords);
   async function openRecordModal(record) {
     setSelectedRecord(record);
 
-    const { data: recordPhotos, error } = await supabase
-      .from("session_photos")
-      .select("*")
-      .eq("session_id", record.id)
-      .order("captured_at", { ascending: false });
+    const photosResponse = await apiGet(`/api/session/${record.id}/photos`);
+    const recordPhotos = photosResponse.photos || [];
+    const error = null;
 
     if (error) {
       console.error("Erro ao carregar fotos do registo:", error);
@@ -2301,9 +2299,9 @@ console.log("FILTERED FINAL:", filteredRecords);
                             {record.archived_at
                               ? ` em ${new Date(record.archived_at).toLocaleString()}`
                               : ""}
-                            {record.archived_by_user_id
-                              ? ` por ${profilesMap[record.archived_by_user_id] || record.archived_by_user_id}`
-                              : ""}
+                            {record.archived_by_name ||
+                              profilesMap[record.archived_by_user_id] ||
+                              record.archived_by_user_id}
                           </div>
                         )}
 
