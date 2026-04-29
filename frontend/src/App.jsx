@@ -5,6 +5,7 @@ import { supabase } from "./supabaseClient";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Capture from "./pages/Capture";
+import Profile from "./pages/Profile";
 
 function PrivateRoute({ session, children }) {
   if (!session) return <Navigate to="/login" replace />;
@@ -34,6 +35,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={session ? <Navigate to="/app" replace /> : <Login />} />
+        <Route path="/app/profile" element={<Profile />} />
 
         <Route
           path="/app"

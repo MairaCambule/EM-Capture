@@ -118,60 +118,60 @@ export default function Capture({ session }) {
   console.log("TEACHER RECORDS:", teacherRecords);
   console.log("VIEW:", recordsView);
 
-const filteredRecordsByArchive = baseRecords.filter((record) => {
-  const isArchived = record.is_archived === true;
+  const filteredRecordsByArchive = baseRecords.filter((record) => {
+    const isArchived = record.is_archived === true;
 
-  if (recordsFilterMode === "active") return !isArchived;
-  if (recordsFilterMode === "archived") return isArchived;
+    if (recordsFilterMode === "active") return !isArchived;
+    if (recordsFilterMode === "archived") return isArchived;
 
-  return true;
-});
+    return true;
+  });
 
-const filteredRecords = filteredRecordsByArchive.filter((record) => {
-  const recordDate = record.started_at
-    ? new Date(record.started_at).toISOString().slice(0, 10)
-    : "";
+  const filteredRecords = filteredRecordsByArchive.filter((record) => {
+    const recordDate = record.started_at
+      ? new Date(record.started_at).toISOString().slice(0, 10)
+      : "";
 
-  const matchesDate = !filterDate || recordDate === filterDate;
+    const matchesDate = !filterDate || recordDate === filterDate;
 
-  const matchesName =
-    !filterName ||
-    String(record.user_name || "")
-      .toLowerCase()
-      .includes(filterName.toLowerCase());
+    const matchesName =
+      !filterName ||
+      String(record.user_name || "")
+        .toLowerCase()
+        .includes(filterName.toLowerCase());
 
-  const matchesPatient =
-    !filterPatientCode ||
-    String(record.patient_code || "")
-      .toLowerCase()
-      .includes(filterPatientCode.toLowerCase());
+    const matchesPatient =
+      !filterPatientCode ||
+      String(record.patient_code || "")
+        .toLowerCase()
+        .includes(filterPatientCode.toLowerCase());
 
-  const matchesBox =
-    !filterBox ||
-    String(record.box || "")
-      .toLowerCase()
-      .includes(filterBox.toLowerCase());
+    const matchesBox =
+      !filterBox ||
+      String(record.box || "")
+        .toLowerCase()
+        .includes(filterBox.toLowerCase());
 
-  const matchesStatus =
-    !filterStatus ||
-    String(formatSessionStatus(record.status) || "")
-      .toLowerCase()
-      .includes(filterStatus.toLowerCase());
+    const matchesStatus =
+      !filterStatus ||
+      String(formatSessionStatus(record.status) || "")
+        .toLowerCase()
+        .includes(filterStatus.toLowerCase());
 
-  return (
-    matchesDate &&
-    matchesName &&
-    matchesPatient &&
-    matchesBox &&
-    matchesStatus
-  );
-});
+    return (
+      matchesDate &&
+      matchesName &&
+      matchesPatient &&
+      matchesBox &&
+      matchesStatus
+    );
+  });
 
-console.log("BASE RECORDS:", baseRecords);
-console.log("TEACHER RECORDS:", teacherRecords);
-console.log("VIEW:", recordsView);
-console.log("FILTERED BY ARCHIVE:", filteredRecordsByArchive);
-console.log("FILTERED FINAL:", filteredRecords);
+  console.log("BASE RECORDS:", baseRecords);
+  console.log("TEACHER RECORDS:", teacherRecords);
+  console.log("VIEW:", recordsView);
+  console.log("FILTERED BY ARCHIVE:", filteredRecordsByArchive);
+  console.log("FILTERED FINAL:", filteredRecords);
 
 
   const [pendingResumeRecord, setPendingResumeRecord] = useState(null);
@@ -1432,6 +1432,23 @@ console.log("FILTERED FINAL:", filteredRecords);
         <button className="secondary-btn" onClick={logout}>
           Sair
         </button>
+
+        <button
+          type="button"
+          onClick={() => navigate("/app/profile")}
+          style={{
+            background: "#eef4fb",
+            color: "#1e4a8d",
+            border: "none",
+            padding: "10px 16px",
+            borderRadius: 12,
+            fontWeight: 700,
+            cursor: "pointer",
+          }}
+        >
+          Perfil
+        </button>
+
       </div>
 
       <section
