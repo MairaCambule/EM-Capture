@@ -55,16 +55,32 @@ export default function AdminUsers() {
                 }
             );
 
-            alert("Utilizador criado com sucesso");
+            setMsg({
+                type: "success",
+                text: "Utilizador criado com sucesso.",
+            });
 
             setOpenCreate(false);
+
+            setNewUser({
+                full_name: "",
+                email: "",
+                password: "",
+                role: "user",
+                phone: "",
+                job_title: "",
+                department: "",
+            });
 
             // reload lista
             loadUsers();
 
         } catch (err) {
             console.error("CREATE USER ERROR:", err);
-            alert(err.response?.data?.error || "Erro ao criar utilizador");
+            setMsg({
+                type: "error",
+                text: err.response?.data?.error || "Erro ao criar utilizador.",
+            });;
         }
     };
 
