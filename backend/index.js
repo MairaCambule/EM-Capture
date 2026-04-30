@@ -13,6 +13,8 @@ app.use(express.json());
 
 const upload = multer({ storage: multer.memoryStorage() });
 
+const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+
 const PHOTO_BUCKET = "clinical-photos";
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -1413,6 +1415,57 @@ app.post("/api/session/delete-permanently", requireAuth, async (req, res) => {
     return res.status(500).json({ error: "Erro ao eliminar registo definitivamente." });
   }
 });
+
+app.post("/api/admin/create-user", async (req, res) => {
+  try {
+    const {
+      email,
+      password,
+      full_name,
+      role,
+      phone,
+      job_title,
+      department,
+    } = req.body;
+
+    // 🔐 Criar utilizador no Auth (Supabase)
+    const { data: authUser, error: authError } =
+      await supabase.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+      });
+
+    if (authError) {
+      return res.status(400).json({ error: authError.message });
+    }
+
+    const userId = authUser.user.id;
+
+    // 📦 Guardar dados no profiles
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .insert({
+        id: userId,
+        email,
+        full_name,
+        role,
+        phone,
+        job_title,
+        department,
+      });
+
+    if (profileError) {
+      return res.status(400).json({ error: profileError.message });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: "Erro interno" });
+  }
+});
+
+
 
 const listenPort = process.env.PORT || 3001;
 app.listen(listenPort, () => {
