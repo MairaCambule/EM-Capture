@@ -2187,7 +2187,7 @@ export default function Capture({ session }) {
             <div>
               <h2 style={{ margin: 0, color: "#1e4a8d", fontSize: "1.7rem" }}>
                 {isTeacher
-                  ? "Registos atribuídos"
+                  ? "Registos"
                   : recordsView === "all"
                     ? "Todos os registos"
                     : "Meus registos"}
@@ -2214,7 +2214,7 @@ export default function Capture({ session }) {
                   className={recordsView === "assigned" ? "primary-btn" : "soft-btn"}
                   onClick={() => setRecordsView("assigned")}
                 >
-                  Registos Teacher
+                  Registos atribuídos
                 </button>
               )}
 
