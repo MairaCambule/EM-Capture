@@ -101,6 +101,29 @@ async function requireAuth(req, res, next) {
   }
 }
 
+async function requireGlobalAdmin(req, res, next) {
+  try {
+    const userId = req.user.id;
+
+    const { data: profile, error } = await supabaseAdmin
+      .from("profiles")
+      .select("role")
+      .eq("id", userId)
+      .single();
+
+    if (error || profile?.role !== "global_admin") {
+      return res.status(403).json({
+        error: "Apenas global admins podem executar esta ação.",
+      });
+    }
+
+    next();
+  } catch (error) {
+    console.error("GLOBAL ADMIN CHECK ERROR:", error);
+    return res.status(500).json({ error: "Erro ao validar permissões." });
+  }
+}
+
 app.get("/health", (_, res) => res.json({ ok: true }));
 
 app.post("/api/queue/join", requireAuth, async (req, res) => {
@@ -1064,6 +1087,111 @@ app.get("/api/session/:sessionId/photos", requireAuth, async (req, res) => {
   } catch (err) {
     console.error("GET SESSION PHOTOS ERROR:", err);
     return res.status(500).json({ error: "Erro ao carregar fotografias." });
+  }
+});
+app.get("/api/admin/users", requireAuth, requireGlobalAdmin, async (req, res) => {
+  try {
+    const { data: profiles, error: profilesError } = await supabaseAdmin
+      .from("profiles")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (profilesError) {
+      return res.status(400).json({ error: profilesError.message });
+    }
+
+    const { data: moduleAccess, error: moduleError } = await supabaseAdmin
+      .from("user_module_access")
+      .select(`
+        user_id,
+        role,
+        platform_modules (
+          code,
+          name
+        )
+      `);
+
+    if (moduleError) {
+      return res.status(400).json({ error: moduleError.message });
+    }
+
+    const users = (profiles || []).map((profile) => ({
+      ...profile,
+      modules: (moduleAccess || []).filter((item) => item.user_id === profile.id),
+    }));
+
+    return res.json({ users });
+  } catch (error) {
+    console.error("ADMIN USERS ERROR:", error);
+    return res.status(500).json({ error: "Erro ao carregar utilizadores." });
+  }
+});
+
+app.post("/api/admin/users/update", requireAuth, requireGlobalAdmin, async (req, res) => {
+  try {
+    const {
+      userId,
+      fullName,
+      phone,
+      jobTitle,
+      department,
+      role,
+    } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId é obrigatório." });
+    }
+
+    const { error } = await supabaseAdmin
+      .from("profiles")
+      .update({
+        full_name: fullName,
+        phone,
+        job_title: jobTitle,
+        department,
+        role,
+      })
+      .eq("id", userId);
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+
+    return res.json({ updated: true });
+  } catch (error) {
+    console.error("UPDATE ADMIN USER ERROR:", error);
+    return res.status(500).json({ error: "Erro ao atualizar utilizador." });
+  }
+});
+
+app.post("/api/admin/users/reset-password", requireAuth, requireGlobalAdmin, async (req, res) => {
+  try {
+    const { userId, newPassword } = req.body;
+
+    if (!userId || !newPassword) {
+      return res.status(400).json({
+        error: "userId e newPassword são obrigatórios.",
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        error: "A password deve ter pelo menos 6 caracteres.",
+      });
+    }
+
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+      password: newPassword,
+    });
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+
+    return res.json({ updated: true });
+  } catch (error) {
+    console.error("RESET PASSWORD ERROR:", error);
+    return res.status(500).json({ error: "Erro ao alterar password." });
   }
 });
 
