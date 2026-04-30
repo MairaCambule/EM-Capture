@@ -28,6 +28,17 @@ export default function AdminUsers() {
         role: "user",
     });
 
+    const primaryBtn = {
+        background: "#1e4a8d",
+        color: "#fff",
+        padding: "10px 16px",
+        borderRadius: 8,
+        border: "none",
+        fontWeight: 600,
+        cursor: "pointer",
+    };
+
+
     const handleCreateUser = async () => {
         try {
             const {

@@ -13,7 +13,7 @@ app.use(express.json());
 
 const upload = multer({ storage: multer.memoryStorage() });
 
-const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+
 
 const PHOTO_BUCKET = "clinical-photos";
 
@@ -36,6 +36,10 @@ const supabaseAuth = createClient(
   SUPABASE_URL,
   SUPABASE_ANON_KEY
 );
+
+
+const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+
 
 function getBearerToken(req) {
   const auth = req.headers.authorization || "";
