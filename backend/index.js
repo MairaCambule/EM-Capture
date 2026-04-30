@@ -1200,6 +1200,23 @@ app.get("/api/admin/users", async (req, res) => {
 });
 
 
+app.get("/api/admin/modules", requireAuth, requireGlobalAdmin, async (req, res) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("platform_modules")
+      .select("id, code, name, description")
+      .order("name", { ascending: true });
+
+    if (error) return res.status(400).json({ error: error.message });
+
+    return res.json({ modules: data || [] });
+  } catch (error) {
+    console.error("ADMIN MODULES ERROR:", error);
+    return res.status(500).json({ error: "Erro ao carregar módulos." });
+  }
+});
+
+
 app.post("/api/admin/users/update", requireAuth, requireGlobalAdmin, async (req, res) => {
   try {
     const {

@@ -20,6 +20,8 @@ export default function AdminUsers() {
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [saving, setSaving] = useState(false);
 
+    const [modules, setModules] = useState([]);
+
     const [form, setForm] = useState({
         fullName: "",
         phone: "",
@@ -155,6 +157,8 @@ export default function AdminUsers() {
 
             const data = await apiGet("/api/admin/users");
             setUsers(data.users || []);
+            const modulesData = await apiGet("/api/admin/modules");
+            setModules(modulesData.modules || []);
         } catch (error) {
             console.error("Erro ao carregar utilizadores:", error);
             setMsg({
@@ -269,6 +273,45 @@ export default function AdminUsers() {
         }
     }
 
+    async function handleModuleRoleChange(userId, moduleCode, value) {
+        try {
+            setMsg(null);
+
+            if (!value) {
+                await apiPost("/api/admin/users/remove-module-access", {
+                    userId,
+                    moduleCode,
+                });
+
+                setMsg({
+                    type: "success",
+                    text: "Acesso ao módulo removido com sucesso.",
+                });
+            } else {
+                await apiPost("/api/admin/users/module-access", {
+                    userId,
+                    moduleCode,
+                    role: value,
+                });
+
+                setMsg({
+                    type: "success",
+                    text: "Permissão do módulo atualizada com sucesso.",
+                });
+            }
+
+            await loadUsers();
+        } catch (error) {
+            console.error("MODULE ROLE CHANGE ERROR:", error);
+            setMsg({
+                type: "error",
+                text:
+                    error.response?.data?.error ||
+                    "Erro ao atualizar permissão do módulo.",
+            });
+        }
+    }
+
     async function updateModuleAccess(userId, role) {
         try {
             setMsg(null);
@@ -351,6 +394,14 @@ export default function AdminUsers() {
         if (role === "module_admin") return "Module Admin";
         if (role === "teacher") return "Professor";
         return "User";
+    }
+
+    function getUserModuleRole(user, moduleCode) {
+        const access = (user.modules || []).find(
+            (item) => item.platform_modules?.code === moduleCode
+        );
+
+        return access?.role || "";
     }
 
     function roleColor(role) {
@@ -773,6 +824,79 @@ export default function AdminUsers() {
                                     }}
                                 >
                                     <h3 style={{ margin: 0, color: "#1e4a8d" }}>
+                                        Permissões por módulo
+                                    </h3>
+
+                                    <p style={{ color: "#5f6b7a", marginTop: 6 }}>
+                                        Define o acesso e o nível de permissão por módulo.
+                                    </p>
+
+                                    <div style={{ display: "grid", gap: 12, marginTop: 16 }}>
+                                        {modules.length === 0 ? (
+                                            <p style={{ color: "#64748b", margin: 0 }}>
+                                                Nenhum módulo disponível.
+                                            </p>
+                                        ) : (
+                                            modules.map((module) => (
+                                                <div
+                                                    key={module.id}
+                                                    style={{
+                                                        display: "grid",
+                                                        gridTemplateColumns: "1fr 180px",
+                                                        gap: 12,
+                                                        alignItems: "center",
+                                                        padding: 14,
+                                                        background: "#fff",
+                                                        border: "1px solid #e4e9f0",
+                                                        borderRadius: 14,
+                                                    }}
+                                                >
+                                                    <div>
+                                                        <div style={{ fontWeight: 900, color: "#17324d" }}>
+                                                            {module.name || module.code}
+                                                        </div>
+                                                        <div style={{ color: "#64748b", fontSize: 13 }}>
+                                                            {module.code}
+                                                        </div>
+                                                    </div>
+
+                                                    <select
+                                                        value={getUserModuleRole(selectedUser, module.code)}
+                                                        onChange={(e) =>
+                                                            handleModuleRoleChange(
+                                                                selectedUser.id,
+                                                                module.code,
+                                                                e.target.value
+                                                            )
+                                                        }
+                                                        style={{
+                                                            padding: "10px 12px",
+                                                            borderRadius: 12,
+                                                            border: "1px solid #dbe3ec",
+                                                            background: "#fff",
+                                                            fontWeight: 700,
+                                                        }}
+                                                    >
+                                                        <option value="">Sem acesso</option>
+                                                        <option value="user">User</option>
+                                                        <option value="module_admin">Module Admin</option>
+                                                    </select>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div
+                                    style={{
+                                        marginTop: 24,
+                                        padding: 18,
+                                        borderRadius: 18,
+                                        background: "#f8fafc",
+                                        border: "1px solid #e4e9f0",
+                                    }}
+                                >
+                                    <h3 style={{ margin: 0, color: "#1e4a8d" }}>
                                         Permissões do módulo
                                     </h3>
 
@@ -780,39 +904,7 @@ export default function AdminUsers() {
                                         Define o acesso deste utilizador ao módulo EM Capture.
                                     </p>
 
-                                    <div style={{ display: "grid", gap: 12, marginTop: 16 }}>
-                                        <button
-                                            type="button"
-                                            onClick={() => updateModuleAccess(selectedUser.id, "user")}
-                                            style={smallSecondaryBtn}
-                                        >
-                                            Dar acesso EM Capture como User
-                                        </button>
 
-                                        <button
-                                            type="button"
-                                            onClick={() => updateModuleAccess(selectedUser.id, "module_admin")}
-                                            style={smallPrimaryBtn}
-                                        >
-                                            Dar acesso EM Capture como Module Admin
-                                        </button>
-
-                                        <button
-                                            type="button"
-                                            onClick={() => removeModuleAccess(selectedUser.id)}
-                                            style={{
-                                                background: "#fff",
-                                                color: "#991b1b",
-                                                border: "1px solid #fecaca",
-                                                padding: "10px 14px",
-                                                borderRadius: 12,
-                                                fontWeight: 800,
-                                                cursor: "pointer",
-                                            }}
-                                        >
-                                            Remover acesso EM Capture
-                                        </button>
-                                    </div>
                                 </div>
                             </div>
                         </div>
