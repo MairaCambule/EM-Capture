@@ -63,8 +63,8 @@ export default function AdminUsers() {
             loadUsers();
 
         } catch (err) {
-            console.error(err);
-            alert("Erro ao criar utilizador");
+            console.error("CREATE USER ERROR:", err);
+            alert(err.response?.data?.error || "Erro ao criar utilizador");
         }
     };
 
@@ -729,78 +729,121 @@ export default function AdminUsers() {
                 </div>
             )}
             {openCreate && (
-                <div className="modal">
-                    <div className="modal-content">
+                <div
+                    style={{
+                        position: "fixed",
+                        inset: 0,
+                        background: "rgba(15, 23, 42, 0.45)",
+                        zIndex: 3000,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: 24,
+                    }}
+                    onClick={() => setOpenCreate(false)}
+                >
+                    <div
+                        style={{
+                            width: "min(720px, 100%)",
+                            background: "#fff",
+                            borderRadius: 24,
+                            padding: 28,
+                            boxShadow: "0 30px 90px rgba(15, 23, 42, 0.25)",
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
+                            <div>
+                                <h2 style={{ margin: 0, color: "#1e4a8d" }}>Novo utilizador</h2>
+                                <p style={{ marginTop: 6, color: "#5f6b7a" }}>
+                                    Cria uma conta e define o perfil inicial do utilizador.
+                                </p>
+                            </div>
 
-                        <h3>Novo utilizador</h3>
+                            <button
+                                type="button"
+                                onClick={() => setOpenCreate(false)}
+                                style={smallSecondaryBtn}
+                            >
+                                Fechar
+                            </button>
+                        </div>
 
-                        <input
-                            placeholder="Nome"
-                            value={newUser.full_name}
-                            onChange={(e) =>
-                                setNewUser({ ...newUser, full_name: e.target.value })
-                            }
-                        />
-
-                        <input
-                            placeholder="Email"
-                            value={newUser.email}
-                            onChange={(e) =>
-                                setNewUser({ ...newUser, email: e.target.value })
-                            }
-                        />
-
-                        <input
-                            placeholder="Password"
-                            type="password"
-                            value={newUser.password}
-                            onChange={(e) =>
-                                setNewUser({ ...newUser, password: e.target.value })
-                            }
-                        />
-
-                        <select
-                            value={newUser.role}
-                            onChange={(e) =>
-                                setNewUser({ ...newUser, role: e.target.value })
-                            }
+                        <div
+                            style={{
+                                display: "grid",
+                                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                                gap: 16,
+                                marginTop: 22,
+                            }}
                         >
-                            <option value="user">User</option>
-                            <option value="teacher">Professor</option>
-                            <option value="global_admin">Admin Global</option>
-                        </select>
+                            <FormField
+                                label="Nome"
+                                value={newUser.full_name}
+                                onChange={(value) => setNewUser({ ...newUser, full_name: value })}
+                            />
 
-                        <input
-                            placeholder="Telemóvel"
-                            value={newUser.phone}
-                            onChange={(e) =>
-                                setNewUser({ ...newUser, phone: e.target.value })
-                            }
-                        />
+                            <FormField
+                                label="Email"
+                                value={newUser.email}
+                                onChange={(value) => setNewUser({ ...newUser, email: value })}
+                            />
 
-                        <input
-                            placeholder="Cargo"
-                            value={newUser.job_title}
-                            onChange={(e) =>
-                                setNewUser({ ...newUser, job_title: e.target.value })
-                            }
-                        />
+                            <FormField
+                                label="Password"
+                                value={newUser.password}
+                                type="password"
+                                onChange={(value) => setNewUser({ ...newUser, password: value })}
+                            />
 
-                        <input
-                            placeholder="Departamento"
-                            value={newUser.department}
-                            onChange={(e) =>
-                                setNewUser({ ...newUser, department: e.target.value })
-                            }
-                        />
+                            <div>
+                                <label style={labelStyle}>Perfil global</label>
+                                <select
+                                    value={newUser.role}
+                                    onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
+                                    style={inputStyle}
+                                >
+                                    <option value="user">User</option>
+                                    <option value="teacher">Professor</option>
+                                    <option value="module_admin">Module Admin</option>
+                                    <option value="global_admin">Global Admin</option>
+                                </select>
+                            </div>
 
-                        <div style={{ marginTop: 20 }}>
-                            <button onClick={handleCreateUser} style={primaryBtn}>
-                                Criar
+                            <FormField
+                                label="Telemóvel"
+                                value={newUser.phone}
+                                onChange={(value) => setNewUser({ ...newUser, phone: value })}
+                            />
+
+                            <FormField
+                                label="Cargo"
+                                value={newUser.job_title}
+                                onChange={(value) => setNewUser({ ...newUser, job_title: value })}
+                            />
+
+                            <FormField
+                                label="Departamento"
+                                value={newUser.department}
+                                onChange={(value) => setNewUser({ ...newUser, department: value })}
+                            />
+                        </div>
+
+                        <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 28 }}>
+                            <button
+                                type="button"
+                                onClick={() => setOpenCreate(false)}
+                                style={smallSecondaryBtn}
+                            >
+                                Cancelar
                             </button>
 
-                            <button onClick={() => setOpenCreate(false)}>
-                                Cancelar
+                            <button
+                                type="button"
+                                onClick={handleCreateUser}
+                                style={smallPrimaryBtn}
+                            >
+                                Criar utilizador
                             </button>
                         </div>
                     </div>
@@ -810,11 +853,12 @@ export default function AdminUsers() {
     );
 }
 
-function FormField({ label, value, onChange }) {
+function FormField({ label, value, onChange, type = "text" }) {
     return (
         <div>
             <label style={labelStyle}>{label}</label>
             <input
+                type={type}
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
                 style={inputStyle}
