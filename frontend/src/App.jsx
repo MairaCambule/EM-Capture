@@ -6,6 +6,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Capture from "./pages/Capture";
 import Profile from "./pages/Profile";
+import AdminUsers from "./pages/AdminUsers";
 
 function PrivateRoute({ session, children }) {
   if (!session) return <Navigate to="/login" replace />;
@@ -36,6 +37,7 @@ export default function App() {
       <Routes>
         <Route path="/login" element={session ? <Navigate to="/app" replace /> : <Login />} />
         <Route path="/app/profile" element={<Profile />} />
+        <Route path="/app/admin/users" element={<AdminUsers />} />
 
         <Route
           path="/app"

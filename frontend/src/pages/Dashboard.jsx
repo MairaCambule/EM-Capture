@@ -129,6 +129,22 @@ function openModule(moduleCode) {
             {isGlobalAdmin ? "Admin global" : "Sessão iniciada"}
           </div>
         </div>
+
+        <button
+          type="button"
+          onClick={() => navigate("/app/admin/users")}
+          style={{
+            background: "#1e4a8d",
+            color: "#fff",
+            border: "none",
+            padding: "10px 16px",
+            borderRadius: 12,
+            fontWeight: 700,
+            cursor: "pointer",
+          }}
+        >
+          Gestão de utilizadores
+        </button>
         <button
           type="button"
           onClick={() => navigate("/app/profile")}
