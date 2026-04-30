@@ -6,7 +6,7 @@ import { supabase } from "../supabaseClient";
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 export default function AdminUsers() {
-    const [users, setUsers] = useState([]);
+    //onst [users, setUsers] = useState([]);
   const navigate = useNavigate();
 
   const [users, setUsers] = useState([]);
