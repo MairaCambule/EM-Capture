@@ -3,9 +3,10 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { supabase } from "../supabaseClient";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 export default function AdminUsers() {
+    const [users, setUsers] = useState([]);
   const navigate = useNavigate();
 
   const [users, setUsers] = useState([]);
@@ -27,6 +28,30 @@ export default function AdminUsers() {
     role: "user",
   });
 
+  useEffect(() => {
+  const loadUsers = async () => {
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      const response = await axios.get(`${API_BASE_URL}/api/admin/users`, {
+        headers: {
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+      });
+
+      console.log("USERS API:", response.data);
+
+      setUsers(response.data.users || []);
+    } catch (err) {
+      console.error("Erro ao carregar utilizadores:", err);
+    }
+  };
+
+  loadUsers();
+}, []);
+  
   async function apiGet(path) {
     const {
       data: { session },
@@ -373,6 +398,7 @@ export default function AdminUsers() {
                 <thead>
                   <tr style={{ background: "#f8fafc" }}>
                     <th style={thStyle}>Utilizador</th>
+                    <th style={thStyle}>Email</th>
                     <th style={thStyle}>Telemóvel</th>
                     <th style={thStyle}>Cargo</th>
                     <th style={thStyle}>Departamento</th>
@@ -385,7 +411,7 @@ export default function AdminUsers() {
                 <tbody>
                   {filteredUsers.length === 0 ? (
                     <tr>
-                      <td colSpan="7" style={{ padding: 20, color: "#5f6b7a" }}>
+                      <td colSpan="8" style={{ padding: 20, color: "#5f6b7a" }}>
                         Nenhum utilizador encontrado.
                       </td>
                     </tr>
@@ -421,6 +447,7 @@ export default function AdminUsers() {
                           </div>
                         </td>
 
+                        <td style={tdStyle}>{user.email || "—"}</td>
                         <td style={tdStyle}>{user.phone || "—"}</td>
                         <td style={tdStyle}>{user.job_title || "—"}</td>
                         <td style={tdStyle}>{user.department || "—"}</td>

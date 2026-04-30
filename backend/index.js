@@ -6,6 +6,7 @@ import multer from "multer";
 
 dotenv.config();
 
+const express = require("express");
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -1126,6 +1127,58 @@ app.get("/api/admin/users", requireAuth, requireGlobalAdmin, async (req, res) =>
     return res.status(500).json({ error: "Erro ao carregar utilizadores." });
   }
 });
+
+app.get("/api/admin/users", async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, full_name, email, role");
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+
+    res.json({
+      users: data || [],
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Erro interno" });
+  }
+});
+
+app.get("/api/admin/users", async (req, res) => {
+  const token = req.headers.authorization?.split(" ")[1];
+
+  if (!token) {
+    return res.status(401).json({ error: "No token" });
+  }
+
+  // validar token com supabase
+  const { data: userData } = await supabase.auth.getUser(token);
+
+  if (!userData?.user) {
+    return res.status(401).json({ error: "Invalid token" });
+  }
+
+  // buscar profile
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", userData.user.id)
+    .single();
+
+  if (profile?.role !== "global_admin") {
+    return res.status(403).json({ error: "Sem permissão" });
+  }
+
+  // buscar users
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, full_name, email, role");
+
+  res.json({ users: data || [] });
+});
+
 
 app.post("/api/admin/users/update", requireAuth, requireGlobalAdmin, async (req, res) => {
   try {
