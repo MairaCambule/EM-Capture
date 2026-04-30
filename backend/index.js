@@ -1420,24 +1420,38 @@ app.post("/api/session/delete-permanently", requireAuth, async (req, res) => {
   }
 });
 
-app.post("/api/admin/create-user", async (req, res) => {
+app.post("/api/admin/create-user", requireAuth, requireGlobalAdmin, async (req, res) => {
   try {
     const {
       email,
       password,
       full_name,
-      role,
+      role = "user",
       phone,
       job_title,
       department,
     } = req.body;
 
-    // 🔐 Criar utilizador no Auth (Supabase)
+    if (!email || !password || !full_name) {
+      return res.status(400).json({
+        error: "Nome, email e password são obrigatórios.",
+      });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({
+        error: "A password deve ter pelo menos 6 caracteres.",
+      });
+    }
+
     const { data: authUser, error: authError } =
-      await supabase.auth.admin.createUser({
+      await supabaseAdmin.auth.admin.createUser({
         email,
         password,
         email_confirm: true,
+        user_metadata: {
+          full_name,
+        },
       });
 
     if (authError) {
@@ -1446,26 +1460,31 @@ app.post("/api/admin/create-user", async (req, res) => {
 
     const userId = authUser.user.id;
 
-    // 📦 Guardar dados no profiles
-    const { error: profileError } = await supabase
+    const { error: profileError } = await supabaseAdmin
       .from("profiles")
-      .insert({
-        id: userId,
-        email,
-        full_name,
-        role,
-        phone,
-        job_title,
-        department,
-      });
+      .upsert(
+        {
+          id: userId,
+          full_name,
+          role,
+          phone: phone || null,
+          job_title: job_title || null,
+          department: department || null,
+        },
+        { onConflict: "id" }
+      );
 
     if (profileError) {
       return res.status(400).json({ error: profileError.message });
     }
 
-    res.json({ success: true });
+    return res.json({
+      created: true,
+      userId,
+    });
   } catch (err) {
-    res.status(500).json({ error: "Erro interno" });
+    console.error("CREATE USER ERROR:", err);
+    return res.status(500).json({ error: "Erro interno ao criar utilizador." });
   }
 });
 
