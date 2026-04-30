@@ -572,20 +572,29 @@ export default function AdminUsers() {
               </button>
             </div>
 
-            <div style={{ display: "grid", gap: 18 }}>
-              <FormField
-                label="Nome"
-                value={form.fullName}
-                onChange={(value) =>
-                  setForm((prev) => ({ ...prev, fullName: value }))
-                }
-              />
+                      <div style={{ display: "grid", gap: 18 }}>
+                          <FormField
+                              label="Nome"
+                              value={form.fullName}
+                              onChange={(value) =>
+                                  setForm((prev) => ({ ...prev, fullName: value }))
+                              }
+                          />
 
-              <FormField
-                label="Telemóvel"
-                value={form.phone}
-                onChange={(value) =>
-                  setForm((prev) => ({ ...prev, phone: value }))
+                          <FormField
+                              label="Email"
+                              value={form.email}
+                              onChange={(value) =>
+                                  setForm((prev) => ({ ...prev, email: value }))
+                              }
+                          />
+
+
+                          <FormField
+                              label="Telemóvel"
+                              value={form.phone}
+                              onChange={(value) =>
+                                  setForm((prev) => ({ ...prev, phone: value }))
                 }
               />
 
