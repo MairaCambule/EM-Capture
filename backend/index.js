@@ -1090,6 +1090,7 @@ app.get("/api/session/:sessionId/photos", requireAuth, async (req, res) => {
     return res.status(500).json({ error: "Erro ao carregar fotografias." });
   }
 });
+
 app.get("/api/admin/users", requireAuth, requireGlobalAdmin, async (req, res) => {
   try {
     const { data: profiles, error: profilesError } = await supabaseAdmin
@@ -1100,6 +1101,18 @@ app.get("/api/admin/users", requireAuth, requireGlobalAdmin, async (req, res) =>
     if (profilesError) {
       return res.status(400).json({ error: profilesError.message });
     }
+
+    const { data: authUsersData, error: authUsersError } =
+      await supabaseAdmin.auth.admin.listUsers();
+
+    if (authUsersError) {
+      return res.status(400).json({ error: authUsersError.message });
+    }
+
+    const authUsersMap = {};
+    (authUsersData?.users || []).forEach((user) => {
+      authUsersMap[user.id] = user.email;
+    });
 
     const { data: moduleAccess, error: moduleError } = await supabaseAdmin
       .from("user_module_access")
@@ -1118,6 +1131,7 @@ app.get("/api/admin/users", requireAuth, requireGlobalAdmin, async (req, res) =>
 
     const users = (profiles || []).map((profile) => ({
       ...profile,
+      email: authUsersMap[profile.id] || null,
       modules: (moduleAccess || []).filter((item) => item.user_id === profile.id),
     }));
 
