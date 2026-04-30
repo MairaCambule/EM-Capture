@@ -269,6 +269,65 @@ export default function AdminUsers() {
         }
     }
 
+    async function updateModuleAccess(userId, role) {
+        try {
+            setMsg(null);
+
+            await apiPost("/api/admin/users/module-access", {
+                userId,
+                moduleCode: "em_capture",
+                role,
+            });
+
+            setMsg({
+                type: "success",
+                text: "Permissão do módulo atualizada com sucesso.",
+            });
+
+            await loadUsers();
+        } catch (error) {
+            console.error("MODULE ACCESS ERROR:", error);
+            setMsg({
+                type: "error",
+                text:
+                    error.response?.data?.error ||
+                    "Erro ao atualizar permissão do módulo.",
+            });
+        }
+    }
+
+    async function removeModuleAccess(userId) {
+        const confirmAction = window.confirm(
+            "Tens a certeza que queres remover o acesso ao módulo EM Capture?"
+        );
+
+        if (!confirmAction) return;
+
+        try {
+            setMsg(null);
+
+            await apiPost("/api/admin/users/remove-module-access", {
+                userId,
+                moduleCode: "em_capture",
+            });
+
+            setMsg({
+                type: "success",
+                text: "Acesso ao módulo removido com sucesso.",
+            });
+
+            await loadUsers();
+        } catch (error) {
+            console.error("REMOVE MODULE ACCESS ERROR:", error);
+            setMsg({
+                type: "error",
+                text:
+                    error.response?.data?.error ||
+                    "Erro ao remover acesso ao módulo.",
+            });
+        }
+    }
+
     const filteredUsers = useMemo(() => {
         return users.filter((user) => {
             const text = filterText.toLowerCase();
@@ -703,6 +762,58 @@ export default function AdminUsers() {
                                     <option value="module_admin">Module Admin</option>
                                     <option value="global_admin">Global Admin</option>
                                 </select>
+
+                                <div
+                                    style={{
+                                        marginTop: 24,
+                                        padding: 18,
+                                        borderRadius: 18,
+                                        background: "#f8fafc",
+                                        border: "1px solid #e4e9f0",
+                                    }}
+                                >
+                                    <h3 style={{ margin: 0, color: "#1e4a8d" }}>
+                                        Permissões do módulo
+                                    </h3>
+
+                                    <p style={{ color: "#5f6b7a", marginTop: 6 }}>
+                                        Define o acesso deste utilizador ao módulo EM Capture.
+                                    </p>
+
+                                    <div style={{ display: "grid", gap: 12, marginTop: 16 }}>
+                                        <button
+                                            type="button"
+                                            onClick={() => updateModuleAccess(selectedUser.id, "user")}
+                                            style={smallSecondaryBtn}
+                                        >
+                                            Dar acesso EM Capture como User
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => updateModuleAccess(selectedUser.id, "module_admin")}
+                                            style={smallPrimaryBtn}
+                                        >
+                                            Dar acesso EM Capture como Module Admin
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => removeModuleAccess(selectedUser.id)}
+                                            style={{
+                                                background: "#fff",
+                                                color: "#991b1b",
+                                                border: "1px solid #fecaca",
+                                                padding: "10px 14px",
+                                                borderRadius: 12,
+                                                fontWeight: 800,
+                                                cursor: "pointer",
+                                            }}
+                                        >
+                                            Remover acesso EM Capture
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 

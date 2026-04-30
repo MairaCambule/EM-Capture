@@ -1488,6 +1488,103 @@ app.post("/api/admin/create-user", requireAuth, requireGlobalAdmin, async (req, 
   }
 });
 
+app.post("/api/admin/users/module-access", requireAuth, requireGlobalAdmin, async (req, res) => {
+  try {
+    const { userId, moduleCode, role } = req.body;
+
+    if (!userId || !moduleCode || !role) {
+      return res.status(400).json({
+        error: "userId, moduleCode e role são obrigatórios.",
+      });
+    }
+
+    const allowedRoles = ["user", "module_admin"];
+
+    if (!allowedRoles.includes(role)) {
+      return res.status(400).json({
+        error: "Role de módulo inválida.",
+      });
+    }
+
+    const { data: moduleData, error: moduleError } = await supabaseAdmin
+      .from("platform_modules")
+      .select("id")
+      .eq("code", moduleCode)
+      .single();
+
+    if (moduleError || !moduleData) {
+      return res.status(404).json({
+        error: "Módulo não encontrado.",
+      });
+    }
+
+    const { error } = await supabaseAdmin
+      .from("user_module_access")
+      .upsert(
+        {
+          user_id: userId,
+          module_id: moduleData.id,
+          role,
+        },
+        {
+          onConflict: "user_id,module_id",
+        }
+      );
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+
+    return res.json({ updated: true });
+  } catch (error) {
+    console.error("MODULE ACCESS ERROR:", error);
+    return res.status(500).json({
+      error: "Erro ao atualizar acesso ao módulo.",
+    });
+  }
+});
+
+app.post("/api/admin/users/remove-module-access", requireAuth, requireGlobalAdmin, async (req, res) => {
+  try {
+    const { userId, moduleCode } = req.body;
+
+    if (!userId || !moduleCode) {
+      return res.status(400).json({
+        error: "userId e moduleCode são obrigatórios.",
+      });
+    }
+
+    const { data: moduleData, error: moduleError } = await supabaseAdmin
+      .from("platform_modules")
+      .select("id")
+      .eq("code", moduleCode)
+      .single();
+
+    if (moduleError || !moduleData) {
+      return res.status(404).json({
+        error: "Módulo não encontrado.",
+      });
+    }
+
+    const { error } = await supabaseAdmin
+      .from("user_module_access")
+      .delete()
+      .eq("user_id", userId)
+      .eq("module_id", moduleData.id);
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+
+    return res.json({ removed: true });
+  } catch (error) {
+    console.error("REMOVE MODULE ACCESS ERROR:", error);
+    return res.status(500).json({
+      error: "Erro ao remover acesso ao módulo.",
+    });
+  }
+});
+
 
 
 const listenPort = process.env.PORT || 3001;
