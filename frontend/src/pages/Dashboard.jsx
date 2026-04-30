@@ -5,6 +5,7 @@ import { supabase } from "../supabaseClient";
 
 export default function Dashboard({ session }) {
   const navigate = useNavigate();
+  
 
   const [profile, setProfile] = useState(null);
   const [modules, setModules] = useState([]);
@@ -128,6 +129,21 @@ function openModule(moduleCode) {
             {isGlobalAdmin ? "Admin global" : "Sessão iniciada"}
           </div>
         </div>
+        <button
+          type="button"
+          onClick={() => navigate("/app/profile")}
+          style={{
+            background: "#eef4fb",
+            color: "#1e4a8d",
+            border: "none",
+            padding: "10px 16px",
+            borderRadius: 12,
+            fontWeight: 700,
+            cursor: "pointer",
+          }}
+        >
+          Perfil
+        </button>
 
         <button className="secondary-btn" onClick={logout}>
           Sair
