@@ -355,13 +355,10 @@ export default function Capture({ session }) {
 
         if (error) {
           console.error("Erro ao buscar sessão:", error);
-          setCurrentSession(null);
-          setBox("");
-          setPatientCode("");
-        } else {
-          setCurrentSession(data || null);
-          setBox(data?.box || "");
-          setPatientCode(data?.patient_code || "");
+        } else if (data) {
+          setCurrentSession(data);
+          setBox(data.box || "");
+          setPatientCode(data.patient_code || "");
         }
       } else {
         setCurrentSession(null);
@@ -1750,13 +1747,22 @@ export default function Capture({ session }) {
               flexWrap: "wrap",
             }}
           >
-            <div>
-              <h2 style={{ margin: 0, color: "#1e4a8d", fontSize: "1.7rem" }}>
-                Estado da câmara
-              </h2>
-              <p style={{ margin: "8px 0 0 0", color: "#5f6b7a" }}>
-                Monitorização do estado atual do equipamento.
-              </p>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <h2 style={{ margin: 0 }}>Estado da câmara</h2>
+
+              {loading && (
+                <span
+                  style={{
+                    width: 18,
+                    height: 18,
+                    border: "3px solid #dbeafe",
+                    borderTop: "3px solid #1e4a8d",
+                    borderRadius: "50%",
+                    display: "inline-block",
+                    animation: "spin 0.8s linear infinite",
+                  }}
+                />
+              )}
             </div>
 
             <div

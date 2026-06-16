@@ -4,9 +4,9 @@ import path from "path";
 import axios from "axios";
 import FormData from "form-data";
 
-const WATCH_FOLDER = "Z:/EM Capture/incoming";
-const PROCESSED_FOLDER = "Z:/EM Capture/processed";
-const ERROR_FOLDER = "Z:/EM Capture/error";
+const WATCH_FOLDER = "C:/EM Capture/incoming";
+const PROCESSED_FOLDER = "C:/EM Capture/processed";
+const ERROR_FOLDER = "C:/EM Capture/error";
 
 const API_URL = "https://em-capture-backend.onrender.com/api/photos/ingest";
 const ACTIVE_SESSION_URL =
@@ -67,6 +67,17 @@ async function getActiveSessionInfo() {
 async function handleNewFile(filePath) {
   try {
     console.log("📸 Nova foto detectada:", filePath);
+    const ext = path.extname(filePath).toLowerCase();
+    const fileName = path.basename(filePath).toLowerCase();
+
+    if (
+      fileName === "thumbs.db" ||
+      ext === ".tmp" ||
+      ![".jpg", ".jpeg", ".png"].includes(ext)
+    ) {
+      console.log("⏭️ Ficheiro ignorado:", filePath);
+      return;
+    }
 
     if (!fs.existsSync(filePath)) {
       console.log("⚠️ O ficheiro já não existe no momento da leitura.");
@@ -88,7 +99,7 @@ async function handleNewFile(filePath) {
 
     const fileBuffer = fs.readFileSync(filePath);
 
-    const ext = path.extname(filePath).toLowerCase();
+    //const ext = path.extname(filePath).toLowerCase();
     let contentType = "application/octet-stream";
     if (ext === ".png") contentType = "image/png";
     if (ext === ".jpg" || ext === ".jpeg") contentType = "image/jpeg";
