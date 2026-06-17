@@ -1969,14 +1969,8 @@ export default function Capture({ session }) {
                   Unidade de trabalho
                 </label>
 
-                <input
-                  value={
-                    currentSession && !isEditingSessionData
-                      ? workUnit
-                      : currentSession && isEditingSessionData
-                        ? workUnit
-                        : draftWorkUnit
-                  }
+            <input
+                  value={currentSession ? workUnit : draftWorkUnit}
                   onChange={(e) => {
                     if (currentSession) {
                       setWorkUnit(e.target.value);
@@ -1984,8 +1978,8 @@ export default function Capture({ session }) {
                       setDraftWorkUnit(e.target.value);
                     }
                   }}
-                  placeholder="Ex: Clínica 1 / Sala 3"
-                  disabled={!currentSession && !isEditingSessionData}
+                  placeholder="Ex: Nº da cadeira"
+                  disabled={currentSession && !isEditingSessionData}
                 />
               </div>
 
@@ -2043,7 +2037,7 @@ export default function Capture({ session }) {
                       onClick={() => {
                         setIsEditingSessionData(false);
                         setBox(currentSession?.box || "");
-                        setWorkUnit(data?.work_unit || "");
+                        setWorkUnit(currentSession?.work_unit || "");
                         setPatientCode(currentSession?.patient_code || "");
                       }}
                     >
