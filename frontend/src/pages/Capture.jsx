@@ -49,6 +49,7 @@ export default function Capture({ session }) {
     type: "default",
   });
 
+  const [showStartSessionModal, setShowStartSessionModal] = useState(false);
 
   const [showStopConfirmModal, setShowStopConfirmModal] = useState(false);
 
@@ -1573,7 +1574,7 @@ export default function Capture({ session }) {
             </div>
 
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <button className="primary-btn" onClick={startSession} disabled={!canStartSessionFinal} >
+              <button className="primary-btn" onClick={() => setShowStartSessionModal(true)} disabled={!canStartSessionFinal} >
                 Iniciar
               </button>
 
@@ -1698,6 +1699,62 @@ export default function Capture({ session }) {
                     onClick={confirmStopSession}
                   >
                     Confirmar conclusão
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showStartSessionModal && (
+            <div className="modal-overlay">
+              <div className="modal-content">
+                <h2>Iniciar sessão clínica</h2>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+
+                  <input
+                    value={draftBox}
+                    onChange={(e) => setDraftBox(e.target.value)}
+                    placeholder="Box"
+                  />
+
+                  <input
+                    value={draftWorkUnit}
+                    onChange={(e) => setDraftWorkUnit(e.target.value)}
+                    placeholder="Unidade de trabalho"
+                  />
+
+                  <input
+                    value={draftPatientCode}
+                    onChange={(e) => setDraftPatientCode(e.target.value)}
+                    placeholder="Código do paciente"
+                  />
+
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 10,
+                    justifyContent: "flex-end",
+                    marginTop: 20,
+                  }}
+                >
+                  <button
+                    className="secondary-btn"
+                    onClick={() => setShowStartSessionModal(false)}
+                  >
+                    Cancelar
+                  </button>
+
+                  <button
+                    className="primary-btn"
+                    onClick={async () => {
+                      await startSession();
+                      setShowStartSessionModal(false);
+                    }}
+                  >
+                    Iniciar sessão
                   </button>
                 </div>
               </div>
