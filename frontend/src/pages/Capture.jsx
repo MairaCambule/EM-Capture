@@ -69,6 +69,7 @@ export default function Capture({ session }) {
   const [loading, setLoading] = useState(true);
   const [box, setBox] = useState("");
   const [patientCode, setPatientCode] = useState("");
+  const [workUnit, setWorkUnit] = useState("");
   const [currentSession, setCurrentSession] = useState(null);
   const [turnExpired, setTurnExpired] = useState(false);
   const [expiringTurn, setExpiringTurn] = useState(false);
@@ -358,11 +359,13 @@ export default function Capture({ session }) {
         } else if (data) {
           setCurrentSession(data);
           setBox(data.box || "");
+          setWorkUnit(data?.work_unit || "");
           setPatientCode(data.patient_code || "");
         }
       } else {
         setCurrentSession(null);
         setBox("");
+        setWorkUnit("");
         setPatientCode("");
       }
 
@@ -1806,6 +1809,15 @@ export default function Capture({ session }) {
                   <p>{cameraState?.status === "in_use" ? cameraState?.current_box || "—" : "—"}</p>
                 </div>
               </div>
+
+            <div style={{ padding: 18, borderRadius: 18, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
+              <div style={{ color: "#7f8b99", marginBottom: 8 }}>Unidade de trabalho</div>
+              <div style={{ fontWeight: 700, color: "#17324d" }}>
+                {cameraState?.status === "available"
+                  ? "—"
+                  : currentSession?.work_unit || workUnit || "—"}
+              </div>
+            </div>
 
               <div style={{ padding: 18, borderRadius: 18, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
                 <div style={{ color: "#7f8b99", marginBottom: 8 }}>Sessão atual</div>
