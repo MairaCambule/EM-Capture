@@ -735,7 +735,7 @@ app.get("/api/camera/active-session", async (req, res) => {
 
 app.post("/api/session/update", requireAuth, async (req, res) => {
   try {
-    const { sessionId, box, patientCode } = req.body;
+    const { sessionId, box, workUnit, patientCode } = req.body;
     const userId = req.user.id;
 
     if (!sessionId) {
@@ -770,6 +770,7 @@ app.post("/api/session/update", requireAuth, async (req, res) => {
       .from("clinical_sessions")
       .update({
         box: box || sessionData.box,
+        work_unit: workUnit || sessionData.work_unit,
         patient_code: patientCode || sessionData.patient_code,
         updated_at: new Date().toISOString(),
       })
