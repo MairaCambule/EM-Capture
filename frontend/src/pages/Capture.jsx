@@ -1779,9 +1779,7 @@ export default function Capture({ session }) {
             </div>
           </div>
 
-          {loading ? (
-            <p>A carregar...</p>
-          ) : (
+         
             <div
               style={{
                 display: "grid",
@@ -1823,7 +1821,7 @@ export default function Capture({ session }) {
                 </div>
               </div>
             </div>
-          )}
+          
         </div>
         <div
           style={{
