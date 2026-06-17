@@ -70,6 +70,7 @@ export default function Capture({ session }) {
   const [box, setBox] = useState("");
   const [patientCode, setPatientCode] = useState("");
   const [workUnit, setWorkUnit] = useState("");
+  const [draftWorkUnit, setDraftWorkUnit] = useState("");
   const [currentSession, setCurrentSession] = useState(null);
   const [turnExpired, setTurnExpired] = useState(false);
   const [expiringTurn, setExpiringTurn] = useState(false);
@@ -1056,6 +1057,7 @@ export default function Capture({ session }) {
         cameraId: CAMERA_ID,
         patientCode: draftPatientCode,
         box: draftBox,
+        workUnit: draftWorkUnit,
       });
 
       if (data.started) {
@@ -1156,6 +1158,7 @@ export default function Capture({ session }) {
       await apiPost("/api/session/update", {
         sessionId: currentSession.id,
         box,
+        workUnit,
         patientCode,
       });
 
@@ -1963,6 +1966,38 @@ export default function Capture({ session }) {
                     fontWeight: 600,
                   }}
                 >
+                  Unidade de trabalho
+                </label>
+
+                <input
+                  value={
+                    currentSession && !isEditingSessionData
+                      ? workUnit
+                      : currentSession && isEditingSessionData
+                        ? workUnit
+                        : draftWorkUnit
+                  }
+                  onChange={(e) => {
+                    if (currentSession) {
+                      setWorkUnit(e.target.value);
+                    } else {
+                      setDraftWorkUnit(e.target.value);
+                    }
+                  }}
+                  placeholder="Ex: Clínica 1 / Sala 3"
+                  disabled={!currentSession && !isEditingSessionData}
+                />
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: 8,
+                    color: "#5f6b7a",
+                    fontWeight: 600,
+                  }}
+                >
                   Código do paciente
                 </label>
                 <input
@@ -2008,6 +2043,7 @@ export default function Capture({ session }) {
                       onClick={() => {
                         setIsEditingSessionData(false);
                         setBox(currentSession?.box || "");
+                        setWorkUnit(data?.work_unit || "");
                         setPatientCode(currentSession?.patient_code || "");
                       }}
                     >
