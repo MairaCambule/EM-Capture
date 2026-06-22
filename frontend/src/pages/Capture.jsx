@@ -1056,9 +1056,9 @@ export default function Capture({ session }) {
 
       const data = await apiPost("/api/session/start", {
         cameraId: CAMERA_ID,
-        patientCode: draftPatientCode,
         box: draftBox,
         workUnit: draftWorkUnit,
+        patientCode: draftPatientCode,
       });
 
       if (data.started) {

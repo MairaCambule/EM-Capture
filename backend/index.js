@@ -239,7 +239,7 @@ app.post("/api/queue/sync", requireAuth, async (req, res) => {
 
 app.post("/api/session/start", requireAuth, async (req, res) => {
   try {
-    const { cameraId, patientCode, box } = req.body;
+    const { cameraId, patientCode, box, workUnit } = req.body;
 
     if (!cameraId) {
       return res.status(400).json({ error: "cameraId é obrigatório." });
@@ -303,6 +303,7 @@ app.post("/api/session/start", requireAuth, async (req, res) => {
       .insert({
         camera_id: cameraId,
         user_id: userId,
+        work_unit: workUnit,
         patient_code: patientCode,
         box,
         status: "open",
