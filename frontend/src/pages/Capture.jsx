@@ -215,7 +215,8 @@ export default function Capture({ session }) {
   const hasRequiredSessionData =
     draftBox.trim() !== "" && draftPatientCode.trim() !== "";
 
-  const canStartSessionFinal = canStartSession && hasRequiredSessionData;
+  //const canStartSessionFinal = canStartSession && hasRequiredSessionData;
+  const canStartSessionFinal = isMyTurn && cameraState?.status === "reserved";
 
   const canSeeSessionClinic =
     isCurrentUserUsingCamera || isCurrentUserReserved;
@@ -1574,7 +1575,18 @@ export default function Capture({ session }) {
             </div>
 
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <button className="primary-btn" onClick={() => setShowStartSessionModal(true)} disabled={!canStartSessionFinal} >
+              <button className="primary-btn" onClick={async () => {
+                if (!draftBox.trim() || !draftPatientCode.trim()) {
+                  setMsg({
+                    type: "warning",
+                    text: "Preencha a Box e o Código do paciente antes de iniciar a sessão.",
+                  });
+                  return;
+                }
+
+                await startSession();
+                setShowStartSessionModal(false);
+              }} disabled={!canStartSessionFinal} >
                 Iniciar
               </button>
 
@@ -1987,7 +1999,7 @@ export default function Capture({ session }) {
         </div>
 
 
-        {canSeeSessionClinic && (
+        {false && canSeeSessionClinic && (
           <div
             style={{
               background: "#fff",
