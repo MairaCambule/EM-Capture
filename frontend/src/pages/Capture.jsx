@@ -216,7 +216,7 @@ export default function Capture({ session }) {
     draftBox.trim() !== "" && draftPatientCode.trim() !== "";
 
   //const canStartSessionFinal = canStartSession && hasRequiredSessionData;
-  const canStartSessionFinal = isMyTurn && cameraState?.status === "reserved";
+ // const canStartSessionFinal = isMyTurn && cameraState?.status === "reserved";
 
   const canSeeSessionClinic =
     isCurrentUserUsingCamera || isCurrentUserReserved;
@@ -567,6 +567,7 @@ export default function Capture({ session }) {
     return new Date(myNotifiedEntry.expires_at) > new Date();
   }, [cameraState, currentUserId, myNotifiedEntry]);
 
+  const canStartSessionFinal = isMyTurn && cameraState?.status === "reserved";
 
 
   /*const canStartSession =
