@@ -1707,11 +1707,27 @@ export default function Capture({ session }) {
 
           {showStartSessionModal && (
             <div className="modal-overlay">
-              <div className="modal-content">
-                <h2>Iniciar sessão clínica</h2>
+              <div className="modal-content start-session-modal">
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
+                  <div>
+                    <h2 style={{ margin: 0, color: "#1e4a8d" }}>
+                      Iniciar sessão clínica
+                    </h2>
+                    <p style={{ color: "#5f6b7a", marginTop: 8 }}>
+                      Insira os dados da sessão clínica para começar.
+                    </p>
+                  </div>
 
-                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <button
+                    type="button"
+                    className="secondary-btn"
+                    onClick={() => setShowStartSessionModal(false)}
+                  >
+                    Fechar
+                  </button>
+                </div>
 
+                <div style={{ display: "grid", gap: 14, marginTop: 22 }}>
                   <input
                     value={draftBox}
                     onChange={(e) => setDraftBox(e.target.value)}
@@ -1729,18 +1745,18 @@ export default function Capture({ session }) {
                     onChange={(e) => setDraftPatientCode(e.target.value)}
                     placeholder="Código do paciente"
                   />
-
                 </div>
 
                 <div
                   style={{
                     display: "flex",
-                    gap: 10,
                     justifyContent: "flex-end",
-                    marginTop: 20,
+                    gap: 12,
+                    marginTop: 24,
                   }}
                 >
                   <button
+                    type="button"
                     className="secondary-btn"
                     onClick={() => setShowStartSessionModal(false)}
                   >
@@ -1748,6 +1764,7 @@ export default function Capture({ session }) {
                   </button>
 
                   <button
+                    type="button"
                     className="primary-btn"
                     onClick={async () => {
                       await startSession();
@@ -1760,7 +1777,6 @@ export default function Capture({ session }) {
               </div>
             </div>
           )}
-
         </div>
 
 
