@@ -1558,25 +1558,25 @@ export default function Capture({ session }) {
             <div style={{ fontSize: 12, fontWeight: 500, marginTop: 4 }}>
               Colocar-se na fila de espera
             </div>
+            <div
+              onClick={(e) => {
+                e.stopPropagation();
+                cancelQueue();
+              }}
+              style={{
+                marginTop: 10,
+                fontSize: 13,
+                fontWeight: 800,
+                color: "#1e4a8d",
+                textDecoration: "underline",
+                cursor: canManageQueue ? "pointer" : "not-allowed",
+                opacity: canManageQueue ? 1 : 0.5,
+              }}
+            >
+              Cancelar fila
+            </div>
           </button>
-
-          <button
-            type="button"
-            onClick={cancelQueue}
-            disabled={!canManageQueue}
-            style={{
-              marginTop: 8,
-              border: "none",
-              background: "transparent",
-              color: "#1e4a8d",
-              fontWeight: 700,
-              cursor: canManageQueue ? "pointer" : "not-allowed",
-              opacity: canManageQueue ? 1 : 0.5,
-            }}
-          >
-            Cancelar fila
-          </button>
-
+          
           <button
             type="button"
             onClick={() => setShowStartSessionModal(true)}
