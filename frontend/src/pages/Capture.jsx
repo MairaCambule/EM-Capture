@@ -2663,9 +2663,15 @@ export default function Capture({ session }) {
                           className="secondary-btn"
                           onClick={async () => {
                             setPendingResumeRecord(selectedRecord);
+
                             setDraftBox(selectedRecord?.box || "");
-                            setDraftWorkUnit(selectedRecord?.work_unit || "");
-                            setDraftPatientCode(selectedRecord?.patient_code || "");
+                            setDraftWorkUnit(selectedRecord?.work_unit || selectedRecord?.workUnit || "");
+                            setDraftPatientCode(
+                              selectedRecord?.patient_code ||
+                              selectedRecord?.patientCode ||
+                              ""
+                            );
+
                             setStartSessionMode("resume");
 
                             await joinQueue();
