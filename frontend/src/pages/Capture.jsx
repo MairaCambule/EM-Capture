@@ -1808,7 +1808,9 @@ export default function Capture({ session }) {
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
                   <div>
                     <h2 style={{ margin: 0, color: "#1e4a8d" }}>
-                      Iniciar sessão clínica
+                      {startSessionMode === "resume"
+                        ? "Retomar sessão clínica"
+                        : "Iniciar sessão clínica"}
                     </h2>
                     <p style={{ color: "#5f6b7a", marginTop: 8 }}>
                       Insira os dados da sessão clínica para começar.
