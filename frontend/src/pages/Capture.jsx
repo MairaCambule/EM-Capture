@@ -51,6 +51,8 @@ export default function Capture({ session }) {
 
   const [showStartSessionModal, setShowStartSessionModal] = useState(false);
 
+  const [startSessionMode, setStartSessionMode] = useState("start");
+
   const [showStopConfirmModal, setShowStopConfirmModal] = useState(false);
 
   const [isEditingSessionData, setIsEditingSessionData] = useState(false);
@@ -1642,7 +1644,7 @@ export default function Capture({ session }) {
               Encerrar e finalizar
             </div>
           </button>
-        </div>
+        </div> 
 
         {isMyTurn && (
           <div
@@ -1866,7 +1868,9 @@ export default function Capture({ session }) {
                       setShowStartSessionModal(false);
                     }}
                   >
-                    Iniciar sessão
+                    {startSessionMode === "resume"
+                      ? "Retomar sessão clínica"
+                      : "Iniciar sessão clínica"}
                   </button>
                 </div>
               </div>
@@ -1922,7 +1926,7 @@ export default function Capture({ session }) {
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <h2 style={{ margin: 0 }}>Estado da câmara</h2>
+              <h2 style={{ margin: 0 }}>Estado da câmara 📷</h2>
 
               {loading && (
                 <span
@@ -2657,6 +2661,11 @@ export default function Capture({ session }) {
                           className="secondary-btn"
                           onClick={async () => {
                             setPendingResumeRecord(selectedRecord);
+                            setDraftBox(selectedRecord?.box || "");
+                            setDraftWorkUnit(selectedRecord?.work_unit || "");
+                            setDraftPatientCode(selectedRecord?.patient_code || "");
+                            setStartSessionMode("resume");
+
                             await joinQueue();
                             closeRecordModal();
                           }}
