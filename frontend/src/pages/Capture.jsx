@@ -2662,6 +2662,7 @@ export default function Capture({ session }) {
                         <button
                           className="secondary-btn"
                           onClick={async () => {
+                            console.log(selectedRecord);
                             setPendingResumeRecord(selectedRecord);
 
                             setDraftBox(selectedRecord?.box || "");
@@ -3031,6 +3032,8 @@ export default function Capture({ session }) {
 
                   if (pendingResumeRecord) {
                     await resumeSession(pendingResumeRecord);
+                    setPendingResumeRecord(null);
+                    setStartSessionMode("start");
                   } else {
                     await startSession();
                   }
