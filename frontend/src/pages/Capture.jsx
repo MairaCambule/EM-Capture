@@ -1550,7 +1550,7 @@ export default function Capture({ session }) {
               color: "#1e4a8d",
               fontWeight: 900,
               cursor: canManageQueue ? "pointer" : "not-allowed",
-              opacity: canManageQueue ? 1 : 0.55,
+              opacity: canManageQueue ? 1 : 0.82,
             }}
           >
             <div style={{ fontSize: 24, marginBottom: 6 }}>👥</div>
@@ -1589,7 +1589,7 @@ export default function Capture({ session }) {
               color: "#0f9f55",
               fontWeight: 900,
               cursor: canStartSessionFinal ? "pointer" : "not-allowed",
-              opacity: canStartSessionFinal ? 1 : 0.55,
+              opacity: canStartSessionFinal ? 1 : 0.82,
             }}
           >
             <div style={{ fontSize: 24, marginBottom: 6 }}>▶️</div>
@@ -1611,7 +1611,7 @@ export default function Capture({ session }) {
               color: "#d97706",
               fontWeight: 900,
               cursor: canPauseOrStop ? "pointer" : "not-allowed",
-              opacity: canPauseOrStop ? 1 : 0.55,
+              opacity: canPauseOrStop ? 1 : 0.82,
             }}
           >
             <div style={{ fontSize: 24, marginBottom: 6 }}>⏸️</div>
@@ -1633,7 +1633,7 @@ export default function Capture({ session }) {
               color: "#dc2626",
               fontWeight: 900,
               cursor: canStopSession ? "pointer" : "not-allowed",
-              opacity: canStopSession ? 1 : 0.55,
+              opacity: canStopSession ? 1 : 0.82,
             }}
           >
             <div style={{ fontSize: 24, marginBottom: 6 }}>⏹️</div>
