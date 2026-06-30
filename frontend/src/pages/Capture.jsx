@@ -1562,6 +1562,23 @@ export default function Capture({ session }) {
 
           <button
             type="button"
+            onClick={cancelQueue}
+            disabled={!canManageQueue}
+            style={{
+              marginTop: 8,
+              border: "none",
+              background: "transparent",
+              color: "#1e4a8d",
+              fontWeight: 700,
+              cursor: canManageQueue ? "pointer" : "not-allowed",
+              opacity: canManageQueue ? 1 : 0.5,
+            }}
+          >
+            Cancelar fila
+          </button>
+
+          <button
+            type="button"
             onClick={() => setShowStartSessionModal(true)}
             disabled={!canStartSessionFinal}
             style={{
