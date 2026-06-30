@@ -2927,6 +2927,7 @@ export default function Capture({ session }) {
               <button
                 className="primary-btn"
                 onClick={async () => {
+                  setShowStartSessionModal(true);
                   setShowTurnModal(false);
 
                   if (pendingResumeRecord) {
