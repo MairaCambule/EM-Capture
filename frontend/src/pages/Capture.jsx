@@ -1558,8 +1558,9 @@ export default function Capture({ session }) {
             <div style={{ fontSize: 12, fontWeight: 500, marginTop: 4 }}>
               Colocar-se na fila de espera
             </div>
+          </button>
 
-              <button
+          <button
             type="button"
             onClick={cancelQueue}
             disabled={!canManageQueue}
@@ -1575,9 +1576,6 @@ export default function Capture({ session }) {
           >
             Cancelar fila
           </button>
-          </button>
-
-        
 
           <button
             type="button"
