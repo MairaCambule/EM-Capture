@@ -216,7 +216,7 @@ export default function Capture({ session }) {
     draftBox.trim() !== "" && draftPatientCode.trim() !== "";
 
   //const canStartSessionFinal = canStartSession && hasRequiredSessionData;
- // const canStartSessionFinal = isMyTurn && cameraState?.status === "reserved";
+  // const canStartSessionFinal = isMyTurn && cameraState?.status === "reserved";
 
   const canSeeSessionClinic =
     isCurrentUserUsingCamera || isCurrentUserReserved;
@@ -1503,14 +1503,164 @@ export default function Capture({ session }) {
           background: "linear-gradient(180deg, #ffffff 0%, #fbfcff 100%)",
         }}
       >
-        <h2 style={{ marginTop: 0, color: "#1e4a8d", fontSize: "1.7rem" }}>
-          Ações
-        </h2>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div
+            style={{
+              width: 42,
+              height: 42,
+              borderRadius: "50%",
+              background: "#eef4ff",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 22,
+            }}
+          >
+            ⚡
+          </div>
+
+          <div>
+            <h2 style={{ margin: 0, color: "#1e4a8d", fontSize: "1.7rem" }}>
+              Ações rápidas
+            </h2>
+            <p style={{ color: "#5f6b7a", margin: "6px 0 0" }}>
+              Controle da fila e do ciclo da sessão atual.
+            </p>
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+            gap: 18,
+            marginTop: 28,
+          }}
+        >
+          <button
+            type="button"
+            onClick={joinQueue}
+            disabled={!canManageQueue}
+            style={{
+              minHeight: 92,
+              borderRadius: 16,
+              border: "1px solid #b9cdf5",
+              background: "#f8fbff",
+              color: "#1e4a8d",
+              fontWeight: 900,
+              cursor: canManageQueue ? "pointer" : "not-allowed",
+              opacity: canManageQueue ? 1 : 0.55,
+            }}
+          >
+            <div style={{ fontSize: 24, marginBottom: 6 }}>👥</div>
+            Entrar na fila
+            <div style={{ fontSize: 12, fontWeight: 500, marginTop: 4 }}>
+              Colocar-se na fila de espera
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowStartSessionModal(true)}
+            disabled={!canStartSessionFinal}
+            style={{
+              minHeight: 92,
+              borderRadius: 16,
+              border: "1px solid #b7ebc9",
+              background: "#f5fff8",
+              color: "#0f9f55",
+              fontWeight: 900,
+              cursor: canStartSessionFinal ? "pointer" : "not-allowed",
+              opacity: canStartSessionFinal ? 1 : 0.55,
+            }}
+          >
+            <div style={{ fontSize: 24, marginBottom: 6 }}>▶️</div>
+            Iniciar sessão
+            <div style={{ fontSize: 12, fontWeight: 500, marginTop: 4 }}>
+              Iniciar sessão clínica
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={pauseSession}
+            disabled={!canPauseOrStop}
+            style={{
+              minHeight: 92,
+              borderRadius: 16,
+              border: "1px solid #ffd89a",
+              background: "#fffaf0",
+              color: "#d97706",
+              fontWeight: 900,
+              cursor: canPauseOrStop ? "pointer" : "not-allowed",
+              opacity: canPauseOrStop ? 1 : 0.55,
+            }}
+          >
+            <div style={{ fontSize: 24, marginBottom: 6 }}>⏸️</div>
+            Pausar sessão
+            <div style={{ fontSize: 12, fontWeight: 500, marginTop: 4 }}>
+              Pausar sessão ativa
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowStopConfirmModal(true)}
+            disabled={!canStopSession}
+            style={{
+              minHeight: 92,
+              borderRadius: 16,
+              border: "1px solid #ffb4b4",
+              background: "#fff7f7",
+              color: "#dc2626",
+              fontWeight: 900,
+              cursor: canStopSession ? "pointer" : "not-allowed",
+              opacity: canStopSession ? 1 : 0.55,
+            }}
+          >
+            <div style={{ fontSize: 24, marginBottom: 6 }}>⏹️</div>
+            Concluir sessão
+            <div style={{ fontSize: 12, fontWeight: 500, marginTop: 4 }}>
+              Encerrar e finalizar
+            </div>
+          </button>
+        </div>
+
+        {isMyTurn && (
+          <div
+            style={{
+              marginTop: 18,
+              padding: "12px 14px",
+              borderRadius: 14,
+              background: "#eef6ff",
+              border: "1px solid #cfe3ff",
+              color: "#1e4a8d",
+              fontWeight: 700,
+            }}
+          >
+            ℹ️ É a tua vez. Clica em “Iniciar sessão” para preencher os dados clínicos.
+          </div>
+        )}
+
+        {turnExpired && (
+          <div
+            style={{
+              marginTop: 18,
+              padding: "12px 14px",
+              borderRadius: 14,
+              background: "#fff7e6",
+              border: "1px solid #ffe0a6",
+              color: "#b45309",
+              fontWeight: 700,
+            }}
+          >
+            ⚠️ O teu turno expirou. Podes entrar novamente na fila.
+          </div>
+        )}
 
 
-        <p style={{ color: "#5f6b7a", marginTop: 8 }}>
-          Gestão da fila e controlo do ciclo da sessão.
-        </p>
+
 
         <div
           style={{
@@ -1520,91 +1670,6 @@ export default function Capture({ session }) {
             marginTop: 22,
           }}
         >
-          <div
-            style={{
-              padding: 20,
-              borderRadius: 20,
-              background: "#f8fafc",
-              border: "1px solid #e4e9f0",
-            }}
-          >
-            <div style={{ fontWeight: 800, color: "#1e4a8d", marginBottom: 14 }}>
-              Fila
-            </div>
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <button className="primary-btn" onClick={joinQueue} disabled={!canManageQueue}>
-                Entrar na fila
-              </button>
-              <button className="secondary-btn" onClick={cancelQueue} disabled={!canManageQueue}>
-                Cancelar fila
-              </button>
-              <button className="soft-btn" onClick={loadData}>
-                Atualizar
-              </button>
-            </div>
-
-
-            {isMyTurn && (
-              <div style={{ marginTop: 14, color: "#1e4a8d", fontWeight: 700 }}>
-                É a tua vez. O botão de início estará disponível após inserir o nº da Box e código do paciente.
-              </div>
-            )}
-
-            {turnExpired && (
-              <div style={{ marginTop: 14 }}>
-                <div style={{ color: "#c7952d", fontWeight: 700, marginBottom: 10 }}>
-                  O teu turno expirou. Podes entrar novamente na fila.
-                </div>
-
-                <button className="soft-btn" onClick={joinQueue}>
-                  Entrar novamente na fila
-                </button>
-              </div>
-            )}
-          </div>
-
-          <div
-            style={{
-              padding: 20,
-              borderRadius: 20,
-              background: "#f8fafc",
-              border: "1px solid #e4e9f0",
-            }}
-          >
-            <div style={{ fontWeight: 800, color: "#1e4a8d", marginBottom: 14 }}>
-              Sessão
-            </div>
-
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <button className="primary-btn" onClick={async () => {
-                if (!draftBox.trim() || !draftPatientCode.trim()) {
-                  setMsg({
-                    type: "warning",
-                    text: "Preencha a Box e o Código do paciente antes de iniciar a sessão.",
-                  });
-                  return;
-                }
-
-                await startSession();
-                setShowStartSessionModal(false);
-              }} disabled={!canStartSessionFinal} >
-                Iniciar
-              </button>
-
-              <button className="secondary-btn" onClick={pauseSession} disabled={!canPauseOrStop}>
-                Pausar
-              </button>
-              <button
-                className="secondary-btn"
-                onClick={() => setShowStopConfirmModal(true)} disabled={!canStopSession}
-              >
-                Concluir
-              </button>
-            </div>
-          </div>
-
-
-
 
           {showStopConfirmModal && (
             <div
@@ -1871,33 +1936,33 @@ export default function Capture({ session }) {
             </div>
           </div>
 
-         
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                gap: 16,
-              }}
-            >
-              <div style={{ padding: 18, borderRadius: 18, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
-                <div style={{ color: "#7f8b99", marginBottom: 8 }}>Utilizador atual</div>
-                <div style={{ fontWeight: 700, color: "#17324d" }}>
-                  <p>
-                    {cameraState?.status === "available"
-                      ? "—"
-                      : profilesMap[cameraState?.current_user_id] ||
-                      currentSession?.user_name ||
-                      "—"}
-                  </p>
-                </div>
-              </div>
 
-              <div style={{ padding: 18, borderRadius: 18, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
-                <div style={{ color: "#7f8b99", marginBottom: 8 }}>Box atual</div>
-                <div style={{ fontWeight: 700, color: "#17324d" }}>
-                  <p>{cameraState?.status === "in_use" ? cameraState?.current_box || "—" : "—"}</p>
-                </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              gap: 16,
+            }}
+          >
+            <div style={{ padding: 18, borderRadius: 18, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
+              <div style={{ color: "#7f8b99", marginBottom: 8 }}>Utilizador atual</div>
+              <div style={{ fontWeight: 700, color: "#17324d" }}>
+                <p>
+                  {cameraState?.status === "available"
+                    ? "—"
+                    : profilesMap[cameraState?.current_user_id] ||
+                    currentSession?.user_name ||
+                    "—"}
+                </p>
               </div>
+            </div>
+
+            <div style={{ padding: 18, borderRadius: 18, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
+              <div style={{ color: "#7f8b99", marginBottom: 8 }}>Box atual</div>
+              <div style={{ fontWeight: 700, color: "#17324d" }}>
+                <p>{cameraState?.status === "in_use" ? cameraState?.current_box || "—" : "—"}</p>
+              </div>
+            </div>
 
             <div style={{ padding: 18, borderRadius: 18, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
               <div style={{ color: "#7f8b99", marginBottom: 8 }}>Unidade de trabalho</div>
@@ -1908,21 +1973,21 @@ export default function Capture({ session }) {
               </div>
             </div>
 
-              <div style={{ padding: 18, borderRadius: 18, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
-                <div style={{ color: "#7f8b99", marginBottom: 8 }}>Sessão atual</div>
-                <div style={{ fontWeight: 700, color: "#17324d", wordBreak: "break-word" }}>
-                  <p>{cameraState?.status === "in_use" ? currentSession?.id || "—" : "—"}</p>
-                </div>
-              </div>
-
-              <div style={{ padding: 18, borderRadius: 18, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
-                <div style={{ color: "#7f8b99", marginBottom: 8 }}>Código do paciente</div>
-                <div style={{ fontWeight: 700, color: "#17324d" }}>
-                  <p>{cameraState?.status === "in_use" ? currentSession?.patient_code || "—" : "—"}</p>
-                </div>
+            <div style={{ padding: 18, borderRadius: 18, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
+              <div style={{ color: "#7f8b99", marginBottom: 8 }}>Sessão atual</div>
+              <div style={{ fontWeight: 700, color: "#17324d", wordBreak: "break-word" }}>
+                <p>{cameraState?.status === "in_use" ? currentSession?.id || "—" : "—"}</p>
               </div>
             </div>
-          
+
+            <div style={{ padding: 18, borderRadius: 18, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
+              <div style={{ color: "#7f8b99", marginBottom: 8 }}>Código do paciente</div>
+              <div style={{ fontWeight: 700, color: "#17324d" }}>
+                <p>{cameraState?.status === "in_use" ? currentSession?.patient_code || "—" : "—"}</p>
+              </div>
+            </div>
+          </div>
+
         </div>
         <div
           style={{
@@ -2055,7 +2120,7 @@ export default function Capture({ session }) {
                   Unidade de trabalho
                 </label>
 
-            <input
+                <input
                   value={currentSession ? workUnit : draftWorkUnit}
                   onChange={(e) => {
                     if (currentSession) {
