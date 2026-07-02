@@ -1822,8 +1822,6 @@ export default function Capture({ session }) {
                     className="secondary-btn"
                     onClick={() => {
                       setShowStartSessionModal(false);
-                      setPendingResumeRecord(null);
-                      setStartSessionMode("start");
                     }}
                   >
                     Fechar
@@ -1863,8 +1861,6 @@ export default function Capture({ session }) {
                     className="secondary-btn"
                     onClick={() => {
                       setShowStartSessionModal(false);
-                      setPendingResumeRecord(null);
-                      setStartSessionMode("start");
                     }}
                   >
                     Cancelar
@@ -1882,7 +1878,7 @@ export default function Capture({ session }) {
                         return;
                       }
 
-                      if (startSessionMode === "resume" && pendingResumeRecord) {
+                      if (pendingResumeRecord) {
                         await resumeSession(pendingResumeRecord);
                         setPendingResumeRecord(null);
                         setStartSessionMode("start");
@@ -1893,9 +1889,7 @@ export default function Capture({ session }) {
                       setShowStartSessionModal(false);
                     }}
                   >
-                    {startSessionMode === "resume"
-                      ? "Retomar sessão clínica"
-                      : "Iniciar sessão clínica"}
+                    {pendingResumeRecord ? "Retomar sessão clínica" : "Iniciar sessão clínica"}
                   </button>
                 </div>
               </div>
@@ -2674,10 +2668,20 @@ export default function Capture({ session }) {
                 {selectedRecord?.status === "paused" &&
                   selectedRecord?.user_id === currentUserId && (
                     <div style={{ marginBottom: 24, display: "flex", gap: 12, flexWrap: "wrap" }}>
-                      {isMyTurn ? (
-                        <button
-                          className="primary-btn"
-                          onClick={() => resumeSession(selectedRecord)}
+                    {isMyTurn ? (
+                      <button
+                        className="primary-btn"
+                        onClick={() => {
+                          setPendingResumeRecord(selectedRecord);
+                          setStartSessionMode("resume");
+
+                          setDraftBox(selectedRecord?.box || "");
+                          setDraftWorkUnit(selectedRecord?.work_unit || selectedRecord?.workUnit || "");
+                          setDraftPatientCode(selectedRecord?.patient_code || selectedRecord?.patientCode || "");
+
+                          closeRecordModal();
+                          setShowStartSessionModal(true);
+}}
                         >
                           Retomar sessão
                         </button>
@@ -3048,14 +3052,6 @@ export default function Capture({ session }) {
                 onClick={async () => {
                   setShowStartSessionModal(true);
                   setShowTurnModal(false);
-
-                  if (pendingResumeRecord) {
-                    await resumeSession(pendingResumeRecord);
-                    setPendingResumeRecord(null);
-                    setStartSessionMode("start");
-                  } else {
-                    await startSession();
-                  }
                 }}
               >
                 {pendingResumeRecord ? "Retomar sessão" : "Iniciar sessão"}
@@ -3065,8 +3061,6 @@ export default function Capture({ session }) {
                 className="secondary-btn"
                 onClick={() => {
                   setShowStartSessionModal(false);
-                  setPendingResumeRecord(null);
-                  setStartSessionMode("start");
                 }}
               >
                 Fechar
