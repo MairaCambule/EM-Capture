@@ -1878,26 +1878,11 @@ export default function Capture({ session }) {
                         return;
                       }
 
-                      if (pendingResumeRecord) {
-                        await apiPost("/api/session/update", {
-                          sessionId: pendingResumeRecord.id,
-                          box: draftBox,
-                          workUnit: draftWorkUnit,
-                          patientCode: draftPatientCode,
-                        });
-
-                        await resumeSession(pendingResumeRecord);
-
-                        setPendingResumeRecord(null);
-                        setStartSessionMode("start");
-                      } else {
-                        await startSession();
-                      }
-
+                      await startSession();
                       setShowStartSessionModal(false);
                     }}
                   >
-                    {pendingResumeRecord ? "Retomar sessão clínica" : "Iniciar sessão clínica"}
+                    {"Iniciar sessão clínica"}
                   </button>
                 </div>
               </div>
@@ -2693,42 +2678,15 @@ export default function Capture({ session }) {
                         >
                           Retomar sessão
                         </button>
-                      ) : (
-                        <button
-                          className="secondary-btn"
-                          onClick={async () => {
-
-                            console.log("selectedRecord =", selectedRecord);
-
-                            setPendingResumeRecord(selectedRecord);
-                            setStartSessionMode("resume");
-
-                            setDraftBox(
-                              selectedRecord?.box ||
-                              selectedRecord?.session_box ||
-                              selectedRecord?.clinical_sessions?.box ||
-                              ""
-                            );
-
-                            setDraftWorkUnit(
-                              selectedRecord?.work_unit ||
-                              selectedRecord?.workUnit ||
-                              selectedRecord?.clinical_sessions?.work_unit ||
-                              ""
-                            );
-
-                            setDraftPatientCode(
-                              selectedRecord?.patient_code ||
-                              selectedRecord?.patientCode ||
-                              selectedRecord?.clinical_sessions?.patient_code ||
-                              selectedRecord?.cod_paciente ||
-                              ""
-                            );
-
-                            await joinQueue();
-                            closeRecordModal();
-                          }}
-                        >
+                    ) : (
+                      <button
+                        className="secondary-btn"
+                        onClick={async () => {
+                          setPendingResumeRecord(selectedRecord);
+                          await joinQueue();
+                          closeRecordModal();
+                        }}
+                      >
                           Entrar na fila para retomar
                         </button>
                       )}
@@ -3077,8 +3035,14 @@ export default function Capture({ session }) {
               <button
                 className="primary-btn"
                 onClick={async () => {
-                  setShowStartSessionModal(true);
                   setShowTurnModal(false);
+
+                  if (pendingResumeRecord) {
+                    await resumeSession(pendingResumeRecord);
+                    setPendingResumeRecord(null);
+                  } else {
+                    setShowStartSessionModal(true);
+                  }
                 }}
               >
                 {pendingResumeRecord ? "Retomar sessão" : "Iniciar sessão"}
@@ -3086,10 +3050,7 @@ export default function Capture({ session }) {
 
               <button
                 className="secondary-btn"
-                onClick={() => {
-                  setShowTurnModal(false);
-                  setShowStartSessionModal(true);
-                }}
+                onClick={() => setShowTurnModal(false)}
               >
                 Fechar
               </button>
