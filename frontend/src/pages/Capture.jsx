@@ -1785,7 +1785,7 @@ export default function Capture({ session }) {
                   <button
                     type="button"
                     className="secondary-btn"
-                    onClick={() => setShowStopConfirmModal(false)}
+                    onClick={() => setShowStopConfirmModal(false) }
                   >
                     Cancelar
                   </button>
@@ -2662,18 +2662,14 @@ export default function Capture({ session }) {
                         <button
                           className="secondary-btn"
                           onClick={async () => {
-                            console.log(selectedRecord);
                             setPendingResumeRecord(selectedRecord);
+                            setStartSessionMode("resume");
 
                             setDraftBox(selectedRecord?.box || "");
                             setDraftWorkUnit(selectedRecord?.work_unit || selectedRecord?.workUnit || "");
                             setDraftPatientCode(
-                              selectedRecord?.patient_code ||
-                              selectedRecord?.patientCode ||
-                              ""
+                              selectedRecord?.patient_code || selectedRecord?.patientCode || ""
                             );
-
-                            setStartSessionMode("resume");
 
                             await joinQueue();
                             closeRecordModal();
