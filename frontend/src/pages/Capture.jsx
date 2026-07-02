@@ -2689,6 +2689,9 @@ export default function Capture({ session }) {
                         <button
                           className="secondary-btn"
                           onClick={async () => {
+
+                            console.log("selectedRecord =", selectedRecord);
+                            
                             setPendingResumeRecord(selectedRecord);
                             setStartSessionMode("resume");
 
@@ -3060,7 +3063,8 @@ export default function Capture({ session }) {
               <button
                 className="secondary-btn"
                 onClick={() => {
-                  setShowStartSessionModal(false);
+                  setShowTurnModal(false);
+                  setShowStartSessionModal(true);
                 }}
               >
                 Fechar
