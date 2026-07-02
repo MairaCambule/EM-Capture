@@ -1820,7 +1820,11 @@ export default function Capture({ session }) {
                   <button
                     type="button"
                     className="secondary-btn"
-                    onClick={() => setShowStartSessionModal(false)}
+                    onClick={() => {
+                      setShowStartSessionModal(false);
+                      setPendingResumeRecord(null);
+                      setStartSessionMode("start");
+                    }}
                   >
                     Fechar
                   </button>
@@ -1857,7 +1861,11 @@ export default function Capture({ session }) {
                   <button
                     type="button"
                     className="secondary-btn"
-                    onClick={() => setShowStartSessionModal(false)}
+                    onClick={() => {
+                      setShowStartSessionModal(false);
+                      setPendingResumeRecord(null);
+                      setStartSessionMode("start");
+                    }}
                   >
                     Cancelar
                   </button>
@@ -1866,7 +1874,22 @@ export default function Capture({ session }) {
                     type="button"
                     className="primary-btn"
                     onClick={async () => {
-                      await startSession();
+                      if (!draftBox.trim() || !draftPatientCode.trim()) {
+                        setMsg({
+                          type: "warning",
+                          text: "Preencha a Box e o Código do paciente.",
+                        });
+                        return;
+                      }
+
+                      if (startSessionMode === "resume" && pendingResumeRecord) {
+                        await resumeSession(pendingResumeRecord);
+                        setPendingResumeRecord(null);
+                        setStartSessionMode("start");
+                      } else {
+                        await startSession();
+                      }
+
                       setShowStartSessionModal(false);
                     }}
                   >
@@ -3040,7 +3063,11 @@ export default function Capture({ session }) {
 
               <button
                 className="secondary-btn"
-                onClick={() => setShowTurnModal(false)}
+                onClick={() => {
+                  setShowStartSessionModal(false);
+                  setPendingResumeRecord(null);
+                  setStartSessionMode("start");
+                }}
               >
                 Fechar
               </button>
