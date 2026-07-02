@@ -1878,6 +1878,22 @@ export default function Capture({ session }) {
                         return;
                       }
 
+                      if (pendingResumeRecord) {
+                        await apiPost("/api/session/update", {
+                          sessionId: pendingResumeRecord.id,
+                          box: draftBox,
+                          workUnit: draftWorkUnit,
+                          patientCode: draftPatientCode,
+                        });
+
+                        await resumeSession(pendingResumeRecord);
+
+                        setPendingResumeRecord(null);
+                        setStartSessionMode("start");
+                      } else {
+                        await startSession();
+                      }
+
                       setShowStartSessionModal(false);
                     }}
                   >
@@ -2687,10 +2703,26 @@ export default function Capture({ session }) {
                             setPendingResumeRecord(selectedRecord);
                             setStartSessionMode("resume");
 
-                            setDraftBox(selectedRecord?.box || "");
-                            setDraftWorkUnit(selectedRecord?.work_unit || selectedRecord?.workUnit || "");
+                            setDraftBox(
+                              selectedRecord?.box ||
+                              selectedRecord?.session_box ||
+                              selectedRecord?.clinical_sessions?.box ||
+                              ""
+                            );
+
+                            setDraftWorkUnit(
+                              selectedRecord?.work_unit ||
+                              selectedRecord?.workUnit ||
+                              selectedRecord?.clinical_sessions?.work_unit ||
+                              ""
+                            );
+
                             setDraftPatientCode(
-                              selectedRecord?.patient_code || selectedRecord?.patientCode || ""
+                              selectedRecord?.patient_code ||
+                              selectedRecord?.patientCode ||
+                              selectedRecord?.clinical_sessions?.patient_code ||
+                              selectedRecord?.cod_paciente ||
+                              ""
                             );
 
                             await joinQueue();
