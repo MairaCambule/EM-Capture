@@ -1878,14 +1878,6 @@ export default function Capture({ session }) {
                         return;
                       }
 
-                      if (pendingResumeRecord) {
-                        await resumeSession(pendingResumeRecord);
-                        setPendingResumeRecord(null);
-                        setStartSessionMode("start");
-                      } else {
-                        await startSession();
-                      }
-
                       setShowStartSessionModal(false);
                     }}
                   >
@@ -2691,7 +2683,7 @@ export default function Capture({ session }) {
                           onClick={async () => {
 
                             console.log("selectedRecord =", selectedRecord);
-                            
+
                             setPendingResumeRecord(selectedRecord);
                             setStartSessionMode("resume");
 
