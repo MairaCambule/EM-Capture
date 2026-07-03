@@ -1808,9 +1808,7 @@ export default function Capture({ session }) {
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
                   <div>
                     <h2 style={{ margin: 0, color: "#1e4a8d" }}>
-                      {startSessionMode === "resume"
-                        ? "Retomar sessão clínica"
-                        : "Iniciar sessão clínica"}
+                      Iniciar sessão clínica
                     </h2>
                     <p style={{ color: "#5f6b7a", marginTop: 8 }}>
                       Insira os dados da sessão clínica para começar.
@@ -3040,10 +3038,9 @@ export default function Capture({ session }) {
                   if (pendingResumeRecord) {
                     await resumeSession(pendingResumeRecord);
                     setPendingResumeRecord(null);
-                  } else {
-                    setShowStartSessionModal(true);
-                  }
+                  } 
                 }}
+                
               >
                 {pendingResumeRecord ? "Retomar sessão" : "Iniciar sessão"}
               </button>
@@ -3051,6 +3048,7 @@ export default function Capture({ session }) {
               <button
                 className="secondary-btn"
                 onClick={() => setShowTurnModal(false)}
+                
               >
                 Fechar
               </button>
