@@ -3439,3 +3439,5 @@ export default function Capture({ session }) {
 // fix deploy teacherRecords
 
 // force fresh vercel deployment
+
+console.log('DEPLOY NOVO D47 - EM CAPTURE');
