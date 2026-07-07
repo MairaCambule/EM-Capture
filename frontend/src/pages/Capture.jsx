@@ -1,1942 +1,3438 @@
-import express from "express";
-import cors from "cors";
-import dotenv from "dotenv";
-import { createClient } from "@supabase/supabase-js";
-import multer from "multer";
-import admin from "firebase-admin";
-import jwt from "jsonwebtoken";
-import crypto from "crypto";
-
-dotenv.config();
-
-//const express = require("express");
-const app = express();
-app.use(cors());
-app.use(express.json());
-
-const upload = multer({ storage: multer.memoryStorage() });
+import { useEffect, useMemo, useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "../supabaseClient";
+import axios from "axios";
 
 
+//const API_URL = "https://em-capture-backend.onrender.com/api/photos/ingest";
+const ACTIVE_SESSION_URL = "https://em-capture-backend.onrender.com/api/camera/active-session";
+
+//const API_URL = import.meta.env.VITE_API_URL;
+const CAMERA_ID = import.meta.env.VITE_DEFAULT_CAMERA_ID;
 
 const PHOTO_BUCKET = "clinical-photos";
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
-const SUPABASE_JWT_SECRET = process.env.SUPABASE_JWT_SECRET;
-const FIREBASE_SERVICE_ACCOUNT_BASE64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
-const FIREBASE_SERVICE_ACCOUNT_JSON = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+export default function Capture({ session }) {
+  const navigate = useNavigate();
 
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !SUPABASE_ANON_KEY) {
-  throw new Error(
-    "Missing env vars. Check SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY"
-  );
-}
+  const [showTurnModal, setShowTurnModal] = useState(false);
+  const [msg, setMsg] = useState({ text: "", type: "" });
+  useEffect(() => {
+    if (!msg.text) return;
 
-const supabaseAdmin = createClient(
-  SUPABASE_URL,
-  SUPABASE_SERVICE_ROLE_KEY
-);
+    const timeout =
+      msg.type === "warning" ? 30000 : 4000;
 
-const supabaseAuth = createClient(
-  SUPABASE_URL,
-  SUPABASE_ANON_KEY
-);
+    const timer = setTimeout(() => {
+      setMsg({ text: "", type: "" });
+    }, timeout);
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-//const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    return () => clearTimeout(timer);
+  }, [msg]);
 
-let firebaseReady = false;
+  const [teachers, setTeachers] = useState([]);
+  const [selectedTeacherId, setSelectedTeacherId] = useState("");
+  const [sessionTeachers, setSessionTeachers] = useState([]);
+  const [loadingTeachers, setLoadingTeachers] = useState(false);
+  const [loadingId, setLoadingId] = useState(null);
+  const [teacherRecords, setTeacherRecords] = useState([]);
 
-function initFirebaseAdminIfNeeded() {
-  if (firebaseReady) return;
+  //const [teacherRecords, setTeacherRecords] = useState([]);
 
-  if (admin.apps.length > 0) {
-    firebaseReady = true;
-    return;
-  }
-
-  let serviceAccount = null;
-
-  if (FIREBASE_SERVICE_ACCOUNT_BASE64) {
-    const decoded = Buffer.from(FIREBASE_SERVICE_ACCOUNT_BASE64, "base64").toString("utf8");
-    serviceAccount = JSON.parse(decoded);
-  } else if (FIREBASE_SERVICE_ACCOUNT_JSON) {
-    serviceAccount = JSON.parse(FIREBASE_SERVICE_ACCOUNT_JSON);
-  }
-
-  if (!serviceAccount) {
-    throw new Error(
-      "Faltam credenciais Firebase. Define FIREBASE_SERVICE_ACCOUNT_BASE64 ou FIREBASE_SERVICE_ACCOUNT_JSON."
-    );
-  }
-
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
+  const [currentPhase, setCurrentPhase] = useState("during");
+  const [confirmModal, setConfirmModal] = useState({
+    open: false,
+    title: "",
+    message: "",
+    confirmText: "",
+    action: null,
+    type: "default",
   });
 
-  firebaseReady = true;
-}
+  const [showStartSessionModal, setShowStartSessionModal] = useState(false);
 
-function normalizeEmail(email) {
-  return String(email || "").trim().toLowerCase();
-}
+  const [startSessionMode, setStartSessionMode] = useState("start");
 
-function mapPortalRoleToSupabaseProfileRole(portalRole, isPortalAdmin) {
-  if (isPortalAdmin) return "global_admin";
-  if (portalRole === "teacher") return "teacher";
-  return "user";
-}
+  const [showStopConfirmModal, setShowStopConfirmModal] = useState(false);
 
-function mapPortalRoleToModuleRole(portalRole, isPortalAdmin) {
-  if (isPortalAdmin || portalRole === "admin") return "module_admin";
-  return "user";
-}
+  const [isEditingSessionData, setIsEditingSessionData] = useState(false);
 
-function createSupabaseAccessJwt({ userId, email, fullName }) {
-  if (!SUPABASE_JWT_SECRET) {
-    throw new Error("Falta SUPABASE_JWT_SECRET no backend.");
-  }
+  const [recordActionLoadingId, setRecordActionLoadingId] = useState(null);
 
-  const now = Math.floor(Date.now() / 1000);
-  const expiresInSeconds = 60 * 60 * 2;
+  const API_BASE_URL = import.meta.env.VITE_API_URL;
 
-  const token = jwt.sign(
-    {
-      aud: "authenticated",
-      exp: now + expiresInSeconds,
-      iat: now,
-      sub: userId,
-      email,
-      role: "authenticated",
-      app_metadata: {
-        provider: "portalsmart",
-        providers: ["portalsmart"],
-      },
-      user_metadata: {
-        full_name: fullName || email,
-      },
-    },
-    SUPABASE_JWT_SECRET
-  );
+  //const BASE_URL = "https://em-capture-backend.onrender.com";
 
-  return {
-    token,
-    expiresAt: now + expiresInSeconds,
-  };
-}
-
-async function findSupabaseAuthUserByEmail(email) {
-  let page = 1;
-  const perPage = 1000;
-
-  while (page <= 20) {
-    const { data, error } = await supabaseAdmin.auth.admin.listUsers({
-      page,
-      perPage,
-    });
-
-    if (error) throw error;
-
-    const found = (data?.users || []).find(
-      (user) => normalizeEmail(user.email) === normalizeEmail(email)
-    );
-
-    if (found) return found;
-
-    if (!data?.users || data.users.length < perPage) break;
-    page += 1;
-  }
-
-  return null;
-}
-
-async function ensureSupabaseMirrorUser({ email, fullName, portalRole, isPortalAdmin }) {
-  const normalizedEmail = normalizeEmail(email);
-
-  let authUser = await findSupabaseAuthUserByEmail(normalizedEmail);
-
-  if (!authUser) {
-    const randomPassword = crypto.randomBytes(32).toString("base64url");
-
-    const { data, error } = await supabaseAdmin.auth.admin.createUser({
-      email: normalizedEmail,
-      password: randomPassword,
-      email_confirm: true,
-      user_metadata: {
-        full_name: fullName || normalizedEmail,
-        source: "portalsmart",
-      },
-    });
-
-    if (error) throw error;
-    authUser = data.user;
-  }
-
-  const profileRole = mapPortalRoleToSupabaseProfileRole(portalRole, isPortalAdmin);
-
-  const { error: profileError } = await supabaseAdmin.from("profiles").upsert(
-    {
-      id: authUser.id,
-      full_name: fullName || normalizedEmail,
-      role: profileRole,
-    },
-    { onConflict: "id" }
-  );
-
-  if (profileError) throw profileError;
-
-  const { data: moduleData, error: moduleError } = await supabaseAdmin
-    .from("platform_modules")
-    .select("id")
-    .eq("code", "em_capture")
-    .maybeSingle();
-
-  if (moduleError) throw moduleError;
-
-  if (moduleData?.id) {
-    const moduleRole = mapPortalRoleToModuleRole(portalRole, isPortalAdmin);
-
-    const { error: accessError } = await supabaseAdmin
-      .from("user_module_access")
-      .upsert(
-        {
-          user_id: authUser.id,
-          module_id: moduleData.id,
-          role: moduleRole,
-        },
-        { onConflict: "user_id,module_id" }
-      );
-
-    if (accessError) throw accessError;
-  }
-
-  return authUser;
-}
+  //const API_URL = `${BASE_URL}/api/photos/ingest`;
 
 
-function getBearerToken(req) {
-  const auth = req.headers.authorization || "";
-  return auth.startsWith("Bearer ") ? auth.slice(7) : null;
-}
+  const [cameraState, setCameraState] = useState(null);
+  const [queueEntries, setQueueEntries] = useState([]);
+  const [profilesMap, setProfilesMap] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [box, setBox] = useState("");
+  const [patientCode, setPatientCode] = useState("");
+  const [workUnit, setWorkUnit] = useState("");
+  const [draftWorkUnit, setDraftWorkUnit] = useState("");
+  const [currentSession, setCurrentSession] = useState(null);
+  const [turnExpired, setTurnExpired] = useState(false);
+  const [expiringTurn, setExpiringTurn] = useState(false);
 
-function getAuthedSupabase(req) {
-  const token = getBearerToken(req);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [photoPhase, setPhotoPhase] = useState("after");
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
-  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    },
+  const [myRecords, setMyRecords] = useState([]);
+  const [recordsSearch, setRecordsSearch] = useState("");
+  const [selectedRecord, setSelectedRecord] = useState(null);
+  const [selectedRecordPhotos, setSelectedRecordPhotos] = useState([]);
+  const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
+  const [isEditingRecordData, setIsEditingRecordData] = useState(false);
+  const [savingRecordData, setSavingRecordData] = useState(false);
+  const [recordEditForm, setRecordEditForm] = useState({
+    patientCode: "",
+    box: "",
+    workUnit: "",
   });
-}
-
-async function canAdminEmCapture(userId) {
-  const { data: profileData } = await supabaseAdmin
-    .from("profiles")
-    .select("role")
-    .eq("id", userId)
-    .single();
-
-  if (profileData?.role === "global_admin") return true;
-
-  const { data: moduleAccess } = await supabaseAdmin
-    .from("user_module_access")
-    .select(`
-      role,
-      platform_modules (
-        code
-      )
-    `)
-    .eq("user_id", userId);
-
-  return (moduleAccess || []).some(
-    (item) =>
-      item.role === "module_admin" &&
-      item.platform_modules?.code === "em_capture"
-  );
-}
-
-async function requireAuth(req, res, next) {
-  try {
-    const authHeader = req.headers.authorization || "";
-
-    if (!authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({ error: "No token provided" });
-    }
-
-    const token = authHeader.replace("Bearer ", "").trim();
-
-    const { data, error } = await supabaseAuth.auth.getUser(token);
-
-    if (!error && data?.user) {
-      req.user = data.user;
-      return next();
-    }
-
-    if (SUPABASE_JWT_SECRET) {
-      try {
-        const decoded = jwt.verify(token, SUPABASE_JWT_SECRET, {
-          audience: "authenticated",
-        });
-
-        if (decoded?.sub) {
-          req.user = {
-            id: decoded.sub,
-            email: decoded.email,
-            app_metadata: decoded.app_metadata || {},
-            user_metadata: decoded.user_metadata || {},
-          };
-
-          return next();
-        }
-      } catch (jwtError) {
-        console.error("CUSTOM JWT VERIFY ERROR:", jwtError.message);
-      }
-    }
-
-    return res.status(401).json({ error: "Unauthorized" });
-  } catch (err) {
-    console.error("AUTH ERROR:", err);
-    return res.status(401).json({ error: "Invalid token" });
-  }
-}
-
-async function requireGlobalAdmin(req, res, next) {
-  try {
-    const userId = req.user.id;
-
-    const { data: profile, error } = await supabaseAdmin
-      .from("profiles")
-      .select("role")
-      .eq("id", userId)
-      .single();
-
-    if (error || profile?.role !== "global_admin") {
-      return res.status(403).json({
-        error: "Apenas global admins podem executar esta ação.",
-      });
-    }
-
-    next();
-  } catch (error) {
-    console.error("GLOBAL ADMIN CHECK ERROR:", error);
-    return res.status(500).json({ error: "Erro ao validar permissões." });
-  }
-}
-
-app.get("/health", (_, res) => res.json({ ok: true }));
-
-app.post("/api/auth/portal-login", async (req, res) => {
-  try {
-    initFirebaseAdminIfNeeded();
-
-    const firebaseToken = getBearerToken(req);
-
-    if (!firebaseToken) {
-      return res.status(401).json({ error: "Token Firebase não enviado." });
-    }
-
-    const decodedToken = await admin.auth().verifyIdToken(firebaseToken);
-    const email = normalizeEmail(decodedToken.email);
-
-    if (!email) {
-      return res.status(401).json({ error: "O token Firebase não contém email." });
-    }
-
-    const roleDoc = await admin.firestore().collection("roles").doc(email).get();
-
-    if (!roleDoc.exists) {
-      return res.status(403).json({
-        error: "Utilizador sem perfil no PortalSmart.",
-      });
-    }
-
-    const portalProfile = roleDoc.data() || {};
-    const isPortalAdmin = portalProfile.isAdmin === true;
-    const portalModules = portalProfile.modules || {};
-    const emCaptureRole = isPortalAdmin
-      ? "admin"
-      : portalModules.em_capture || portalProfile.em_capture || "none";
-
-    if (!isPortalAdmin && (!emCaptureRole || emCaptureRole === "none")) {
-      return res.status(403).json({
-        error: "Sem acesso ao módulo EM Capture no PortalSmart.",
-      });
-    }
-
-    const fullName =
-      portalProfile.name ||
-      portalProfile.fullName ||
-      decodedToken.name ||
-      decodedToken.displayName ||
-      email;
-
-    const supabaseUser = await ensureSupabaseMirrorUser({
-      email,
-      fullName,
-      portalRole: emCaptureRole,
-      isPortalAdmin,
-    });
-
-    const { token: supabaseAccessToken, expiresAt } = createSupabaseAccessJwt({
-      userId: supabaseUser.id,
-      email,
-      fullName,
-    });
-
-    return res.json({
-      authenticated: true,
-      emCaptureRole,
-      portalProfile: {
-        email,
-        name: fullName,
-        isAdmin: isPortalAdmin,
-        modules: portalModules,
-      },
-      session: {
-        access_token: supabaseAccessToken,
-        expires_at: expiresAt,
-        user: {
-          id: supabaseUser.id,
-          email,
-          full_name: fullName,
-        },
-      },
-    });
-  } catch (error) {
-    console.error("PORTAL LOGIN ERROR:", error);
-    return res.status(500).json({
-      error: error.message || "Erro ao validar sessão do PortalSmart.",
-    });
-  }
-});
-
-app.post("/api/queue/join", requireAuth, async (req, res) => {
-  try {
-    const { cameraId } = req.body;
-
-    if (!cameraId) {
-      return res.status(400).json({ error: "cameraId is required" });
-    }
-
-    const supabaseUser = getAuthedSupabase(req);
-
-    const { data, error } = await supabaseUser.rpc("queue_join", {
-      p_camera_id: cameraId,
-    });
-
-    if (error) {
-      console.error("QUEUE JOIN RPC ERROR:", error);
-      return res.status(400).json({ error: error.message });
-    }
-
-    return res.json({ queueEntryId: data });
-  } catch (err) {
-    console.error("QUEUE JOIN ERROR:", err);
-    return res.status(500).json({ error: "Erro interno ao entrar na fila." });
-  }
-});
-
-app.post("/api/queue/cancel", requireAuth, async (req, res) => {
-  try {
-    const { cameraId } = req.body;
-
-    if (!cameraId) {
-      return res.status(400).json({ error: "cameraId is required" });
-    }
-
-    const supabaseUser = getAuthedSupabase(req);
-
-    const { data, error } = await supabaseUser.rpc("queue_cancel", {
-      p_camera_id: cameraId,
-    });
-
-    if (error) {
-      console.error("QUEUE CANCEL RPC ERROR:", error);
-      return res.status(400).json({ error: error.message });
-    }
-
-    return res.json({ cancelled: data });
-  } catch (err) {
-    console.error("QUEUE CANCEL ERROR:", err);
-    return res.status(500).json({ error: "Erro interno ao cancelar fila." });
-  }
-});
-
-app.post("/api/queue/expire-turn", requireAuth, async (req, res) => {
-  try {
-    const { cameraId } = req.body;
-
-    if (!cameraId) {
-      return res.status(400).json({ error: "cameraId is required" });
-    }
-
-    const supabaseUser = getAuthedSupabase(req);
-
-    const { data, error } = await supabaseUser.rpc("auto_expire_turn", {
-      p_camera_id: cameraId,
-    });
-
-    if (error) {
-      console.error("EXPIRE TURN RPC ERROR:", error);
-      return res.status(400).json({ error: error.message });
-    }
-
-    return res.json({ expired: data });
-  } catch (err) {
-    console.error("EXPIRE TURN ERROR:", err);
-    return res.status(500).json({ error: "Erro interno ao expirar turno." });
-  }
-});
-
-app.post("/api/queue/sync", requireAuth, async (req, res) => {
-  try {
-    const { cameraId } = req.body;
-
-    if (!cameraId) {
-      return res.status(400).json({ error: "cameraId is required" });
-    }
-
-    const supabaseUser = getAuthedSupabase(req);
-
-    const { data, error } = await supabaseUser.rpc("sync_queue_state", {
-      p_camera_id: cameraId,
-    });
-
-    if (error) {
-      console.error("SYNC QUEUE RPC ERROR:", error);
-      return res.status(400).json({ error: error.message });
-    }
-
-    return res.json({ result: data });
-  } catch (err) {
-    console.error("SYNC QUEUE ERROR:", err);
-    return res.status(500).json({ error: "Erro interno ao sincronizar fila." });
-  }
-});
-
-app.post("/api/session/start", requireAuth, async (req, res) => {
-  try {
-    const { cameraId, patientCode, box, workUnit } = req.body;
-
-    if (!cameraId) {
-      return res.status(400).json({ error: "cameraId é obrigatório." });
-    }
-
-    if (!patientCode) {
-      return res.status(400).json({ error: "patientCode é obrigatório." });
-    }
-
-    if (!box) {
-      return res.status(400).json({ error: "box é obrigatória." });
-    }
-
-    const userId = req.user.id;
-
-    const { data: state, error: stateError } = await supabaseAdmin
-      .from("camera_state")
-      .select("*")
-      .eq("camera_id", cameraId)
-      .single();
-
-    if (stateError || !state) {
-      return res
-        .status(500)
-        .json({ error: "Erro ao obter estado da câmara." });
-    }
-
-    if (state.status !== "reserved") {
-      return res.status(400).json({ error: "A câmara não está reservada." });
-    }
-
-    if (state.current_user_id !== userId) {
-      return res.status(403).json({ error: "Não é a tua vez." });
-    }
-
-    const { data: queueEntry, error: queueError } = await supabaseAdmin
-      .from("queue_entries")
-      .select("*")
-      .eq("camera_id", cameraId)
-      .eq("user_id", userId)
-      .eq("status", "notified")
-      .order("notified_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (queueError || !queueEntry) {
-      return res
-        .status(400)
-        .json({ error: "Entrada da fila não encontrada." });
-    }
-
-    if (
-      !queueEntry.expires_at ||
-      new Date(queueEntry.expires_at) < new Date()
-    ) {
-      return res.status(400).json({ error: "O turno expirou." });
-    }
-
-    const { data: sessionData, error: sessionError } = await supabaseAdmin
-      .from("clinical_sessions")
-      .insert({
-        camera_id: cameraId,
-        user_id: userId,
-        work_unit: workUnit,
-        patient_code: patientCode,
-        box,
-        status: "open",
-        started_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
-
-    if (sessionError || !sessionData) {
-      console.error("SESSION INSERT ERROR:", sessionError);
-      return res.status(500).json({ error: "Erro ao criar sessão." });
-    }
-
-    const { error: queueUpdateError } = await supabaseAdmin
-      .from("queue_entries")
-      .update({
-        status: "served",
-        served_at: new Date().toISOString(),
-      })
-      .eq("id", queueEntry.id);
-
-    if (queueUpdateError) {
-      console.error("QUEUE UPDATE ERROR:", queueUpdateError);
-      return res.status(500).json({ error: "Erro ao atualizar fila." });
-    }
-
-    const { data: updatedState, error: cameraUpdateError } = await supabaseAdmin
-      .from("camera_state")
-      .update({
-        status: "in_use",
-        current_user_id: userId,
-        current_box: box,
-        current_session_id: sessionData.id,
-        current_session_started_at: new Date().toISOString(),
-        last_heartbeat_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("camera_id", cameraId)
-      .select()
-      .single();
-
-    if (cameraUpdateError) {
-      console.error("CAMERA UPDATE ERROR:", cameraUpdateError);
-      return res
-        .status(500)
-        .json({ error: "Erro ao atualizar estado da câmara." });
-    }
-
-    await supabaseAdmin.from("audit_events").insert({
-      actor_user_id: userId,
-      camera_id: cameraId,
-      session_id: sessionData.id,
-      type: "START_SESSION",
-      payload: {
-        patient_code: patientCode,
-        box,
-      },
-    });
-
-    return res.json({
-      started: true,
-      sessionId: sessionData.id,
-      cameraState: updatedState,
-    });
-  } catch (err) {
-    console.error("START SESSION ERROR:", err);
-    return res.status(500).json({ error: "Erro interno." });
-  }
-});
-
-app.post("/api/session/pause", requireAuth, async (req, res) => {
-  try {
-    const { cameraId } = req.body;
-
-    if (!cameraId) {
-      return res.status(400).json({ error: "cameraId is required" });
-    }
-
-    const supabaseUser = getAuthedSupabase(req);
-
-    const { data, error } = await supabaseUser.rpc("pause_session", {
-      p_camera_id: cameraId,
-    });
-
-    if (error) {
-      console.error("PAUSE SESSION RPC ERROR:", error);
-      return res.status(400).json({ error: error.message });
-    }
-
-    return res.json({ paused: data });
-  } catch (error) {
-    console.error("PAUSE SESSION ERROR:", error);
-    return res.status(500).json({
-      error: error.message || "Erro ao pausar sessão.",
-    });
-  }
-});
-
-app.post("/api/session/resume", requireAuth, async (req, res) => {
-  try {
-    const { cameraId, sessionId } = req.body;
-    const userId = req.user.id;
-
-    if (!cameraId || !sessionId) {
-      return res
-        .status(400)
-        .json({ error: "cameraId and sessionId are required" });
-    }
-
-    const { data: sessionData, error: sessionError } = await supabaseAdmin
-      .from("clinical_sessions")
-      .select("*")
-      .eq("id", sessionId)
-      .single();
-
-    if (sessionError || !sessionData) {
-      return res.status(404).json({ error: "Sessão não encontrada." });
-    }
-
-    if (sessionData.user_id !== userId) {
-      return res
-        .status(403)
-        .json({ error: "Não tens permissão para retomar esta sessão." });
-    }
-
-    if (sessionData.status !== "paused") {
-      return res.status(400).json({ error: "A sessão não está pausada." });
-    }
-
-    const { data: cameraState, error: cameraError } = await supabaseAdmin
-      .from("camera_state")
-      .select("*")
-      .eq("camera_id", cameraId)
-      .single();
-
-    if (cameraError || !cameraState) {
-      return res
-        .status(404)
-        .json({ error: "Estado da câmara não encontrado." });
-    }
-
-    if (
-      cameraState.status !== "reserved" ||
-      cameraState.current_user_id !== userId
-    ) {
-      return res.status(400).json({
-        error: "A câmara não está reservada para este utilizador.",
-      });
-    }
-
-    const { data: updatedSession, error: resumeSessionError } = await supabaseAdmin
-      .from("clinical_sessions")
-      .update({
-        status: "open",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", sessionId)
-      .select()
-      .single();
-
-    if (resumeSessionError) {
-      return res.status(400).json({ error: resumeSessionError.message });
-    }
-
-    const { data: updatedCameraState, error: updateCameraError } = await supabaseAdmin
-      .from("camera_state")
-      .update({
-        status: "in_use",
-        current_user_id: userId,
-        current_session_id: sessionId,
-        current_box: updatedSession.box || sessionData.box || null,
-        current_session_started_at: new Date().toISOString(),
-        last_heartbeat_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("camera_id", cameraId)
-      .select()
-      .single();
-
-    if (updateCameraError) {
-      return res.status(400).json({ error: updateCameraError.message });
-    }
-
-    await supabaseAdmin
-      .from("queue_entries")
-      .update({
-        status: "served",
-        served_at: new Date().toISOString(),
-      })
-      .eq("camera_id", cameraId)
-      .eq("user_id", userId)
-      .eq("status", "notified");
-
-    await supabaseAdmin.from("audit_events").insert({
-      actor_user_id: userId,
-      camera_id: cameraId,
-      session_id: sessionId,
-      type: "RESUME_SESSION",
-      payload: {
-        box: updatedSession.box,
-        work_unit: updatedSession.work_unit,
-        patient_code: updatedSession.patient_code,
-      },
-    });
-
-    return res.json({
-      resumed: true,
-      sessionId,
-      session: updatedSession,
-      cameraState: updatedCameraState,
-    });
-  } catch (err) {
-    console.error("RESUME SESSION ERROR:", err);
-    return res.status(500).json({ error: "Erro ao retomar sessão." });
-  }
-});
-
-app.post("/api/session/stop", requireAuth, async (req, res) => {
-  try {
-    const { cameraId } = req.body;
-
-    if (!cameraId) {
-      return res.status(400).json({ error: "cameraId is required" });
-    }
-
-    const { data: cameraState, error: cameraError } = await supabaseAdmin
-      .from("camera_state")
-      .select("*")
-      .eq("camera_id", cameraId)
-      .single();
-
-    if (cameraError || !cameraState) {
-      return res
-        .status(404)
-        .json({ error: "Estado da câmara não encontrado." });
-    }
-
-    const currentSessionId = cameraState.current_session_id;
-
-    const { data: sessionPhotos, error: photosError } = await supabaseAdmin
-      .from("session_photos")
-      .select("id")
-      .eq("session_id", currentSessionId);
-
-    if (photosError) {
-      return res.status(400).json({ error: photosError.message });
-    }
-
-    if (!sessionPhotos || sessionPhotos.length === 0) {
-      return res.status(400).json({
-        error: "Não é possível concluir a sessão sem fotografias associadas.",
-      });
-    }
-
-    const supabaseUser = getAuthedSupabase(req);
-
-    const { data, error } = await supabaseUser.rpc("stop_session", {
-      p_camera_id: cameraId,
-    });
-
-    if (error) {
-      console.error("STOP SESSION RPC ERROR:", error);
-      return res.status(400).json({ error: error.message });
-    }
-
-    return res.json({ stopped: data });
-  } catch (err) {
-    console.error("STOP SESSION ERROR:", err);
-    return res.status(500).json({ error: "Erro ao concluir sessão." });
-  }
-});
-
-console.log("✅ Rota /api/photos/ingest carregada");
-
-app.post(
-  "/api/photos/ingest",
-  upload.single("photo"),
-  async (req, res) => {
-    console.log("🔥 REQUEST RECEBIDO EM /api/photos/ingest");
+
+  const [filterDate, setFilterDate] = useState("");
+  const [filterName, setFilterName] = useState("");
+  const [filterPatientCode, setFilterPatientCode] = useState("");
+  const [filterBox, setFilterBox] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+
+  const [photoPreviewMap, setPhotoPreviewMap] = useState({});
+
+  const [recordsFilterMode, setRecordsFilterMode] = useState("active");
+
+  const [profile, setProfile] = useState(null);
+  const [moduleRole, setModuleRole] = useState("user");
+  const [recordsView, setRecordsView] = useState("mine");
+  const [allRecords, setAllRecords] = useState([]);
+
+  const isGlobalAdmin = profile?.role === "global_admin";
+
+  const isModuleAdmin = moduleRole === "module_admin";
+  const canViewAllRecords = isGlobalAdmin || isModuleAdmin;
+
+
+  const isTeacher =
+    profile?.role?.trim().toLowerCase() === "teacher";
+
+  const baseRecords =
+    isTeacher && recordsView === "assigned"
+      ? teacherRecords
+      : recordsView === "all" && canViewAllRecords
+        ? allRecords
+        : myRecords;
+
+  console.log("BASE RECORDS:", baseRecords);
+  console.log("TEACHER RECORDS:", teacherRecords);
+  console.log("VIEW:", recordsView);
+
+  const filteredRecordsByArchive = baseRecords.filter((record) => {
+    const isArchived = record.is_archived === true;
+
+    if (recordsFilterMode === "active") return !isArchived;
+    if (recordsFilterMode === "archived") return isArchived;
+
+    return true;
+  });
+
+  const filteredRecords = filteredRecordsByArchive.filter((record) => {
+    const recordDate = record.started_at
+      ? new Date(record.started_at).toISOString().slice(0, 10)
+      : "";
+
+    const matchesDate = !filterDate || recordDate === filterDate;
+
+    const matchesName =
+      !filterName ||
+      String(record.user_name || "")
+        .toLowerCase()
+        .includes(filterName.toLowerCase());
+
+    const matchesPatient =
+      !filterPatientCode ||
+      String(record.patient_code || "")
+        .toLowerCase()
+        .includes(filterPatientCode.toLowerCase());
+
+    const matchesBox =
+      !filterBox ||
+      String(record.box || "")
+        .toLowerCase()
+        .includes(filterBox.toLowerCase());
+
+    const matchesStatus =
+      !filterStatus ||
+      String(formatSessionStatus(record.status) || "")
+        .toLowerCase()
+        .includes(filterStatus.toLowerCase());
+
+    return (
+      matchesDate &&
+      matchesName &&
+      matchesPatient &&
+      matchesBox &&
+      matchesStatus
+    );
+  });
+
+  console.log("BASE RECORDS:", baseRecords);
+  console.log("TEACHER RECORDS:", teacherRecords);
+  console.log("VIEW:", recordsView);
+  console.log("FILTERED BY ARCHIVE:", filteredRecordsByArchive);
+  console.log("FILTERED FINAL:", filteredRecords);
+
+
+  const [pendingResumeRecord, setPendingResumeRecord] = useState(null);
+
+  const [draftBox, setDraftBox] = useState("");
+  const [draftPatientCode, setDraftPatientCode] = useState("");
+
+  const currentUserId = session?.user?.id;
+
+  const isCurrentUserUsingCamera =
+    cameraState?.status === "in_use" &&
+    cameraState?.current_user_id === currentUserId &&
+    !!cameraState?.current_session_id;
+
+  const isCurrentUserReserved =
+    cameraState?.status === "reserved" &&
+    cameraState?.current_user_id === currentUserId;
+
+  const isOtherUserUsingCamera =
+    cameraState?.status === "in_use" &&
+    cameraState?.current_user_id &&
+    cameraState?.current_user_id !== currentUserId;
+
+  const isOtherUserReserved =
+    cameraState?.status === "reserved" &&
+    cameraState?.current_user_id &&
+    cameraState?.current_user_id !== currentUserId;
+
+  const canStartSession = isCurrentUserReserved && !isCurrentUserUsingCamera;
+  const canPauseSession = isCurrentUserUsingCamera;
+  const canStopSession = isCurrentUserUsingCamera;
+
+  const canEditSessionData =
+    !!currentSession &&
+    currentSession?.user_id === currentUserId &&
+    (currentSession?.status === "open" || currentSession?.status === "paused");
+
+  const canEditSelectedRecord =
+    !!selectedRecord &&
+    (selectedRecord.user_id === currentUserId || isGlobalAdmin || isModuleAdmin);
+
+  const hasRequiredSessionData =
+    draftBox.trim() !== "" && draftPatientCode.trim() !== "";
+
+  //const canStartSessionFinal = canStartSession && hasRequiredSessionData;
+  // const canStartSessionFinal = isMyTurn && cameraState?.status === "reserved";
+
+  const canSeeSessionClinic =
+    isCurrentUserUsingCamera || isCurrentUserReserved;
+
+  const [isPreparingSession, setIsPreparingSession] = useState(false);
+
+
+
+
+  useEffect(() => {
+    if (!session?.access_token) return;
+
+    console.log("🔐 A configurar realtime auth");
+
+    supabase.realtime.setAuth(session.access_token);
+  }, [session?.access_token]);
+
+
+  const loadData = useCallback(async () => {
     try {
-      const { cameraId, phase = "during" } = req.body;
-      const file = req.file;
+      setLoading(true);
 
-      if (!cameraId) {
-        return res.status(400).json({ error: "cameraId is required" });
-      }
+      await syncQueueState();
 
-      if (!file) {
-        return res.status(400).json({ error: "photo file is required" });
-      }
-
-      const { data: cameraState, error: cameraError } = await supabaseAdmin
+      const { data: stateData, error: stateError } = await supabase
         .from("camera_state")
         .select("*")
-        .eq("camera_id", cameraId)
+        .eq("camera_id", CAMERA_ID)
         .single();
 
-      if (cameraError || !cameraState) {
-        return res
-          .status(404)
-          .json({ error: "Estado da câmara não encontrado." });
+      if (stateError) {
+        console.error("Erro ao carregar camera_state:", stateError);
+        return;
       }
 
-      if (
-        cameraState.status !== "in_use" ||
-        !cameraState.current_session_id ||
-        !cameraState.current_user_id
-      ) {
-        return res.status(400).json({
-          error: "Não existe sessão ativa para esta câmara.",
-        });
-      }
+      setCameraState(stateData);
+      setCurrentPhase(stateData?.current_phase || "during");
 
-      const sessionId = cameraState.current_session_id;
-      const userId = cameraState.current_user_id;
+      const { data: queueData, error: queueError } = await supabase
+        .from("queue_entries")
+        .select("*")
+        .eq("camera_id", CAMERA_ID)
+        .in("status", ["waiting", "notified"])
+        .order("joined_at", { ascending: true });
 
-      const fileExt = file.originalname.split(".").pop() || "jpg";
-      const safePhase = ["before", "during", "after"].includes(phase)
-        ? phase
-        : "during";
+      if (queueError) console.error("Erro ao carregar fila:", queueError);
 
-      const fileName = `${Date.now()}-${Math.random()
-        .toString(36)
-        .slice(2)}.${fileExt}`;
+      const safeQueue = queueData || [];
+      setQueueEntries(safeQueue);
 
-      const storagePath = `${sessionId}/${safePhase}/${fileName}`;
-
-      const { error: uploadError } = await supabaseAdmin.storage
-        .from(PHOTO_BUCKET)
-        .upload(storagePath, file.buffer, {
-          contentType: file.mimetype,
-          upsert: false,
-        });
-
-      if (uploadError) {
-        return res.status(400).json({ error: uploadError.message });
-      }
-
-      const { data: photoRow, error: insertError } = await supabaseAdmin
-        .from("session_photos")
-        .insert({
-          session_id: sessionId,
-          camera_id: cameraId,
-          user_id: userId,
-          phase: safePhase,
-          storage_path: storagePath,
-          captured_at: new Date().toISOString(),
-        })
-        .select()
+      // Perfil do utilizador atual
+      const { data: profileData, error: profileError } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", currentUserId)
         .single();
 
-      if (insertError) {
-        return res.status(400).json({ error: insertError.message });
+      let loadedProfileRole = "user";
+      let isTeacherUser = false;
+      let isGlobalAdminUser = false;
+
+      if (profileError) {
+        console.error("Erro ao carregar profile:", profileError);
+        setProfile(null);
+        setTeacherRecords([]);
+      } else {
+        setProfile(profileData);
+
+        loadedProfileRole = (profileData?.role || "user").trim().toLowerCase();
+        isTeacherUser = loadedProfileRole === "teacher";
+        isGlobalAdminUser = loadedProfileRole === "global_admin";
+
+        console.log("ROLE CARREGADA:", loadedProfileRole);
+        console.log("IS TEACHER:", isTeacherUser);
+        console.log("IS GLOBAL ADMIN:", isGlobalAdminUser);
+
+        if (isTeacherUser) {
+          try {
+            const accessToken = await getApiAccessToken();
+
+            const response = await axios.get(
+              `${API_BASE_URL}/api/teacher/records`,
+              {
+                headers: {
+                  Authorization: `Bearer ${accessToken}`,
+                },
+              }
+            );
+
+            console.log("TEACHER RECORDS:", response.data);
+
+            const records = response.data?.records || [];
+            const normalized = (Array.isArray(records) ? records : []).map((r) => ({
+              ...r,
+              user_name: r.user_name || r.full_name || "—",
+              name: r.name || r.full_name || "—",
+            }));
+
+            setTeacherRecords(normalized);
+          } catch (error) {
+            console.error("Erro ao carregar registos do professor:", error);
+            setTeacherRecords([]);
+          }
+        } else {
+          setTeacherRecords([]);
+        }
       }
 
-      return res.json({
-        ingested: true,
-        photoId: photoRow.id,
-        sessionId,
-        storagePath,
-      });
+      const { data: moduleData, error: moduleError } = await supabase
+        .from("user_module_access")
+        .select(`
+        role,
+        platform_modules (
+          code
+        )
+      `)
+        .eq("user_id", currentUserId);
+
+      let currentModuleRole = "user";
+
+      if (moduleError) {
+        console.error("Erro ao carregar role do módulo:", moduleError);
+      } else {
+        currentModuleRole =
+          (moduleData || []).find(
+            (item) => item.platform_modules?.code === "em_capture"
+          )?.role || "user";
+
+        setModuleRole(currentModuleRole);
+      }
+
+      if (stateData?.status === "in_use" && stateData?.current_session_id) {
+        const { data, error } = await supabase
+          .from("clinical_sessions")
+          .select("*")
+          .eq("id", stateData.current_session_id)
+          .maybeSingle();
+
+        if (error) {
+          console.error("Erro ao buscar sessão:", error);
+        } else if (data) {
+          setCurrentSession(data);
+          setBox(data.box || "");
+          setWorkUnit(data?.work_unit || "");
+          setPatientCode(data.patient_code || "");
+        }
+      } else {
+        setCurrentSession(null);
+        setBox("");
+        setWorkUnit("");
+        setPatientCode("");
+      }
+
+      const { data: allSessionsForNames, error: allSessionsForNamesError } =
+        await supabase.from("clinical_sessions").select("user_id");
+
+      if (allSessionsForNamesError) {
+        console.error(
+          "Erro ao carregar user_ids de clinical_sessions:",
+          allSessionsForNamesError
+        );
+      }
+
+      const ids = [
+        ...new Set(
+          [
+            ...safeQueue.map((q) => q.user_id),
+            ...(allSessionsForNames || []).map((s) => s.user_id),
+            stateData?.current_user_id,
+            currentUserId,
+          ].filter(Boolean)
+        ),
+      ];
+
+      let localProfilesMap = {};
+
+      if (ids.length > 0) {
+        const { data: profilesData, error: profilesError } = await supabase
+          .from("profiles")
+          .select("id, full_name")
+          .in("id", ids);
+
+        if (profilesError) {
+          console.error("Erro ao carregar profiles:", profilesError);
+        } else {
+          (profilesData || []).forEach((p) => {
+            localProfilesMap[p.id] = p.full_name || p.id;
+          });
+
+          setProfilesMap(localProfilesMap);
+        }
+      } else {
+        setProfilesMap({});
+      }
+
+      // Meus registos
+      const { data: sessionsData, error: sessionsError } = await supabase
+        .from("clinical_sessions")
+        .select("*")
+        .eq("user_id", currentUserId)
+        .order("started_at", { ascending: false });
+
+      const archivedByIds = [
+        ...new Set(
+          (sessionsData || []).map((s) => s.archived_by_user_id).filter(Boolean)
+        ),
+      ];
+
+      if (archivedByIds.length > 0) {
+        const { data: archivedProfiles, error: archivedProfilesError } =
+          await supabase
+            .from("profiles")
+            .select("id, full_name")
+            .in("id", archivedByIds);
+
+        if (archivedProfilesError) {
+          console.error(
+            "Erro ao carregar archived_by profiles:",
+            archivedProfilesError
+          );
+        } else {
+          (archivedProfiles || []).forEach((p) => {
+            localProfilesMap[p.id] = p.full_name || p.id;
+          });
+
+          setProfilesMap({ ...localProfilesMap });
+        }
+      }
+
+      if (sessionsError) {
+        console.error("Erro ao carregar meus registos:", sessionsError);
+        setMyRecords([]);
+      } else {
+        const sessions = sessionsData || [];
+
+        if (sessions.length === 0) {
+          setMyRecords([]);
+        } else {
+          const sessionIds = sessions.map((s) => s.id);
+
+          const { data: photosData, error: photosError } = await supabase
+            .from("session_photos")
+            .select("session_id, id")
+            .in("session_id", sessionIds);
+
+          if (photosError) {
+            console.error("Erro ao carregar contagem de fotos:", photosError);
+          }
+
+          const photoCountMap = {};
+          (photosData || []).forEach((photo) => {
+            photoCountMap[photo.session_id] =
+              (photoCountMap[photo.session_id] || 0) + 1;
+          });
+
+          const records = sessions.map((sessionItem) => ({
+            ...sessionItem,
+            user_name:
+              localProfilesMap[sessionItem.user_id] || sessionItem.user_id,
+            photos_count: photoCountMap[sessionItem.id] || 0,
+          }));
+
+          setMyRecords(records);
+        }
+      }
+
+      // Todos os registos apenas para admins
+      if (isGlobalAdminUser || currentModuleRole === "module_admin") {
+        const { data: allSessionsData, error: allSessionsError } = await supabase
+          .from("clinical_sessions")
+          .select("*")
+          .order("started_at", { ascending: false });
+
+        if (allSessionsError) {
+          console.error("Erro ao carregar todos os registos:", allSessionsError);
+          setAllRecords([]);
+        } else {
+          const allSessions = allSessionsData || [];
+
+          if (allSessions.length === 0) {
+            setAllRecords([]);
+          } else {
+            const allSessionIds = allSessions.map((s) => s.id);
+
+            const { data: allPhotosData, error: allPhotosError } = await supabase
+              .from("session_photos")
+              .select("session_id, id")
+              .in("session_id", allSessionIds);
+
+            if (allPhotosError) {
+              console.error(
+                "Erro ao carregar contagem global de fotos:",
+                allPhotosError
+              );
+            }
+
+            const allPhotoCountMap = {};
+            (allPhotosData || []).forEach((photo) => {
+              allPhotoCountMap[photo.session_id] =
+                (allPhotoCountMap[photo.session_id] || 0) + 1;
+            });
+
+            const allRecordsMapped = allSessions.map((sessionItem) => ({
+              ...sessionItem,
+              user_name:
+                localProfilesMap[sessionItem.user_id] || sessionItem.user_id,
+              photos_count: allPhotoCountMap[sessionItem.id] || 0,
+            }));
+
+            setAllRecords(allRecordsMapped);
+          }
+        }
+      } else {
+        setAllRecords([]);
+      }
     } catch (error) {
-      console.error("PHOTO INGEST ERROR:", error);
-      return res
-        .status(500)
-        .json({ error: "Erro interno ao ingerir fotografia." });
+      console.error("Erro ao carregar dados:", error);
+    } finally {
+      setLoading(false);
     }
-  }
-);
+  }, [currentUserId]);
 
-app.post("/api/camera/phase", requireAuth, async (req, res) => {
-  try {
-    const { cameraId, phase } = req.body;
+  useEffect(() => {
+    if (!session?.access_token || !CAMERA_ID) return;
 
-    if (!cameraId || !phase) {
-      return res.status(400).json({ error: "cameraId and phase are required" });
-    }
+    loadData();
+  }, [session?.access_token, CAMERA_ID, loadData]);
 
-    if (!["before", "during", "after"].includes(phase)) {
-      return res.status(400).json({ error: "Fase inválida." });
-    }
 
-    const { error } = await supabaseAdmin
-      .from("camera_state")
-      .update({
-        current_phase: phase,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("camera_id", cameraId);
+  const myNotifiedEntry = queueEntries.find(
+    (entry) => entry.user_id === currentUserId && entry.status === "notified"
+  );
 
-    if (error) {
-      return res.status(400).json({ error: error.message });
+  const isMyTurn = useMemo(() => {
+    if (
+      cameraState?.status !== "reserved" ||
+      cameraState?.current_user_id !== currentUserId
+    ) {
+      return false;
     }
 
-    return res.json({ updated: true, phase });
-  } catch (err) {
-    console.error("UPDATE PHASE ERROR:", err);
-    return res.status(500).json({ error: "Erro ao atualizar fase." });
-  }
-});
-
-app.get("/api/camera/active-session", async (req, res) => {
-  try {
-    const { cameraId } = req.query;
-
-    if (!cameraId) {
-      return res.status(400).json({ error: "cameraId is required" });
+    if (!myNotifiedEntry?.expires_at) {
+      return false;
     }
 
-    const { data: cameraState, error: cameraError } = await supabaseAdmin
-      .from("camera_state")
-      .select("*")
-      .eq("camera_id", cameraId)
-      .single();
+    return new Date(myNotifiedEntry.expires_at) > new Date();
+  }, [cameraState, currentUserId, myNotifiedEntry]);
 
-    if (cameraError || !cameraState) {
-      return res.status(404).json({ error: "Câmara não encontrada." });
-    }
+  const canStartSessionFinal = isMyTurn && cameraState?.status === "reserved";
 
-    if (cameraState.status !== "in_use" || !cameraState.current_session_id) {
-      return res.json({
-        hasActiveSession: false,
-      });
-    }
 
-    const { data: sessionData, error: sessionError } = await supabaseAdmin
-      .from("clinical_sessions")
-      .select("*")
-      .eq("id", cameraState.current_session_id)
-      .single();
+  /*const canStartSession =
+    cameraState?.status === "reserved" &&
+    cameraState?.current_user_id === currentUserId &&
+    myNotifiedEntry &&
+    new Date(myNotifiedEntry.expires_at) > new Date();
+*/
+  const canPauseOrStop =
+    cameraState?.status === "in_use" &&
+    cameraState?.current_user_id === currentUserId &&
+    !!cameraState?.current_session_id;
 
-    if (sessionError || !sessionData) {
-      return res.status(404).json({ error: "Sessão não encontrada." });
-    }
+  /*const isCurrentUserUsingCamera =
+    cameraState?.status === "in_use" &&
+    cameraState?.current_user_id === currentUserId;
+*/
+  console.log("session:", session);
+  console.log("access token exists:", !!session?.access_token);
+  console.log("API_BASE_URL:", API_BASE_URL);
 
-    return res.json({
-      hasActiveSession: true,
-      sessionId: sessionData.id,
-      userId: sessionData.user_id,
-      cameraStatus: cameraState.status,
-      currentPhase: cameraState.current_phase || "during",
+  console.log("CAMERA_ID:", CAMERA_ID);
+
+
+  const canManageQueue = !isCurrentUserUsingCamera;
+
+  const canUploadPhotos =
+    cameraState?.status === "in_use" &&
+    cameraState?.current_user_id === currentUserId &&
+    !!cameraState?.current_session_id;
+
+  const activeRecordsSource =
+    recordsView === "all" && canViewAllRecords ? allRecords : myRecords;
+
+
+
+  console.log("FILTER MODE TESTE:", recordsFilterMode);
+  console.log("FILTERED BY ARCHIVE:", filteredRecordsByArchive);
+  console.log("FILTERED FINAL:", filteredRecords);
+
+  function openConfirmModal({ title, message, confirmText, type, action }) {
+    setConfirmModal({
+      open: true,
+      title,
+      message,
+      confirmText,
+      type: type || "default",
+      action,
     });
-  } catch (err) {
-    console.error("ACTIVE SESSION ERROR:", err);
-    return res.status(500).json({ error: "Erro ao obter sessão ativa." });
   }
-});
+
+  function closeConfirmModal() {
+    setConfirmModal({
+      open: false,
+      title: "",
+      message: "",
+      confirmText: "",
+      action: null,
+      type: "default",
+    });
+  }
+
+  function getStatusMeta(status) {
+    switch (status) {
+      case "available":
+        return { label: "Disponível", bg: "#e8f2fd", color: "#1e4a8d" };
+      case "reserved":
+        return { label: "Reservada", bg: "#fdf2dc", color: "#c7952d" };
+      case "in_use":
+        return { label: "Em uso", bg: "#e8f4ec", color: "#2f7d4c" };
+      case "paused":
+        return { label: "Pausada", bg: "#eef1f5", color: "#5f6b7a" };
+      default:
+        return { label: status || "—", bg: "#eef1f5", color: "#5f6b7a" };
+    }
+  }
+
+  function formatSessionStatus(status) {
+    switch (status) {
+      case "open":
+        return "Aberta";
+      case "paused":
+        return "Pausada";
+      case "closed":
+        return "Fechada";
+      case "auto_closed":
+        return "Fechada auto.";
+      default:
+        return status || "—";
+    }
+  }
+
+  function formatPhaseLabel(phase) {
+    switch (phase) {
+      case "before":
+        return "Inicial";
+      case "during":
+        return "Durante";
+      case "after":
+        return "Final";
+      default:
+        return phase || "-";
+    }
+  }
+
+  function groupPhotosByPhase(photos) {
+    return {
+      before: photos.filter((p) => p.phase === "before"),
+      during: photos.filter((p) => p.phase === "during"),
+      after: photos.filter((p) => p.phase === "after"),
+    };
+  }
+
+  const groupedSelectedRecordPhotos = groupPhotosByPhase(selectedRecordPhotos);
+  const statusMeta = getStatusMeta(cameraState?.status);
 
 
-app.post("/api/session/update", requireAuth, async (req, res) => {
-  try {
-    const { sessionId, box, workUnit, patientCode } = req.body;
-    const userId = req.user.id;
+  //axios.get(`${API_BASE_URL}/api/teachers`)
 
-    if (!sessionId) {
-      return res.status(400).json({ error: "sessionId é obrigatório." });
+  async function logout() {
+    if (session?.auth_provider === "portalsmart") {
+      window.parent?.postMessage({ type: "EM_CAPTURE_BACK_TO_PORTAL" }, "*");
+      return;
     }
 
-    const { data: sessionData, error: sessionError } = await supabaseAdmin
-      .from("clinical_sessions")
-      .select("*")
-      .eq("id", sessionId)
-      .single();
+    await supabase.auth.signOut();
+  }
 
-    if (sessionError || !sessionData) {
-      return res.status(404).json({ error: "Sessão não encontrada." });
+  async function getApiAccessToken() {
+    if (session?.access_token) return session.access_token;
+
+    const {
+      data: { session: activeSession },
+      error: sessionError,
+    } = await supabase.auth.getSession();
+
+    if (sessionError || !activeSession?.access_token) {
+      throw new Error("Sessão inválida. Faz login novamente.");
     }
 
-    const isOwner = sessionData.user_id === userId;
-    const isAdmin = await canAdminEmCapture(userId);
+    return activeSession.access_token;
+  }
 
-    if (!isOwner && !isAdmin) {
-      return res.status(403).json({
-        error: "Sem permissão para editar este registo.",
-      });
+  async function apiPost(path, body) {
+    const accessToken = await getApiAccessToken();
+
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    const text = await response.text();
+
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error("O backend devolveu uma resposta inválida.");
     }
 
-    const nextBox =
-      box !== undefined ? String(box).trim() : sessionData.box;
-
-    const nextWorkUnit =
-      workUnit !== undefined
-        ? String(workUnit).trim()
-        : sessionData.work_unit;
-
-    const nextPatientCode =
-      patientCode !== undefined
-        ? String(patientCode).trim()
-        : sessionData.patient_code;
-
-    if (!nextPatientCode) {
-      return res.status(400).json({
-        error: "O código do paciente é obrigatório.",
-      });
+    if (!response.ok) {
+      throw new Error(data?.error || "Erro na comunicação com o backend.");
     }
 
-    if (!nextBox) {
-      return res.status(400).json({
-        error: "A Box é obrigatória.",
-      });
-    }
+    return data;
+  }
 
-    const { data: updatedSession, error: updateError } = await supabaseAdmin
-      .from("clinical_sessions")
-      .update({
-        box: nextBox,
-        work_unit: nextWorkUnit || null,
-        patient_code: nextPatientCode,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", sessionId)
-      .select()
-      .single();
+  async function apiGet(path) {
+    const accessToken = await getApiAccessToken();
 
-    if (updateError) {
-      return res.status(400).json({ error: updateError.message });
-    }
-
-    const { data: cameraState } = await supabaseAdmin
-      .from("camera_state")
-      .select("camera_id, current_session_id")
-      .eq("camera_id", sessionData.camera_id)
-      .maybeSingle();
-
-    if (cameraState?.current_session_id === sessionId) {
-      await supabaseAdmin
-        .from("camera_state")
-        .update({
-          current_box: nextBox,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("camera_id", sessionData.camera_id);
-    }
-
-    await supabaseAdmin.from("audit_events").insert({
-      actor_user_id: userId,
-      camera_id: sessionData.camera_id,
-      session_id: sessionId,
-      type: "UPDATE_SESSION",
-      payload: {
-        old_box: sessionData.box,
-        new_box: nextBox,
-        old_work_unit: sessionData.work_unit,
-        new_work_unit: nextWorkUnit || null,
-        old_patient_code: sessionData.patient_code,
-        new_patient_code: nextPatientCode,
+    const response = await axios.get(`${API_BASE_URL}${path}`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
       },
     });
 
-    return res.json({
-      updated: true,
-      session: updatedSession,
-    });
-  } catch (err) {
-    console.error("UPDATE SESSION ERROR:", err);
-    return res.status(500).json({
-      error: "Erro interno ao atualizar sessão.",
-    });
+    console.log("API GET RESPONSE:", path, response.data);
+
+    return response.data;
   }
-});
 
 
-app.get("/api/teachers", requireAuth, async (req, res) => {
-  try {
-    const { data, error } = await supabaseAdmin
-      .from("profiles")
-      .select("id, full_name, role")
-      .eq("role", "teacher")
-      .order("full_name", { ascending: true });
-
-    if (error) {
-      return res.status(400).json({ error: error.message });
+  async function expireTurn() {
+    try {
+      const data = await apiPost("/api/queue/expire-turn", {
+        cameraId: CAMERA_ID,
+      });
+      return data;
+    } catch (error) {
+      console.error("EXPIRE TURN ERROR:", error);
+      return null;
     }
-
-    return res.json({ teachers: data || [] });
-  } catch (err) {
-    console.error("GET TEACHERS ERROR:", err);
-    return res.status(500).json({ error: "Erro ao obter professores." });
   }
-});
 
-app.post("/api/session/assign-teacher", requireAuth, async (req, res) => {
-  try {
-    const { sessionId, teacherUserId } = req.body;
-    const grantedByUserId = req.user.id;
+  async function syncQueueState() {
+    try {
+      const data = await apiPost("/api/queue/sync", {
+        cameraId: CAMERA_ID,
+      });
+      return data;
+    } catch (error) {
+      console.error("SYNC QUEUE ERROR:", error);
+      return null;
+    }
+  }
 
-    if (!sessionId || !teacherUserId) {
-      return res.status(400).json({
-        error: "sessionId and teacherUserId are required",
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  async function updatePhase(phase) {
+    try {
+      const data = await apiPost("/api/camera/phase", {
+        cameraId: CAMERA_ID,
+        phase,
+      });
+
+      if (data.updated) {
+        setCurrentPhase(phase);
+        setMsg({
+          text: `Fase atual definida como ${phase === "before"
+            ? "Antes"
+            : phase === "during"
+              ? "Durante"
+              : "Depois"
+            }.`,
+          type: "success",
+        });
+
+        await loadData();
+      }
+    } catch (error) {
+      console.error("UPDATE PHASE ERROR:", error);
+      setMsg({
+        text: error.message,
+        type: "warning",
       });
     }
-
-    const { error } = await supabaseAdmin
-      .from("session_record_access")
-      .upsert(
-        {
-          session_id: sessionId,
-          teacher_user_id: teacherUserId,
-          granted_by_user_id: grantedByUserId,
-        },
-        {
-          onConflict: "session_id,teacher_user_id",
-        }
-      );
-
-    if (error) {
-      return res.status(400).json({ error: error.message });
-    }
-
-    return res.json({ assigned: true });
-  } catch (err) {
-    console.error("ASSIGN TEACHER ERROR:", err);
-    return res.status(500).json({ error: "Erro ao associar professor." });
   }
-});
 
-app.get("/api/session/:sessionId/teachers", requireAuth, async (req, res) => {
-  try {
-    const { sessionId } = req.params;
+  async function loadTeachers() {
+    try {
+      const data = await apiGet("/api/teachers");
+      setTeachers(data.teachers || []);
+    } catch (error) {
+      console.error("Erro ao carregar professores:", error);
+      setTeachers([]);
+    }
+  }
 
-    const { data, error } = await supabaseAdmin
-      .from("session_record_access")
-      .select("id, teacher_user_id, granted_by_user_id, created_at")
-      .eq("session_id", sessionId)
-      .order("created_at", { ascending: false });
+  async function loadSessionTeachers(sessionId) {
+    try {
+      const data = await apiGet(`/api/session/${sessionId}/teachers`);
+      setSessionTeachers(data.teachers || []);
+    } catch (error) {
+      console.error("Erro ao carregar professores da sessão:", error);
+      setSessionTeachers([]);
+    }
+  }
 
-    if (error) {
-      return res.status(400).json({ error: error.message });
+  async function assignTeacherToSession() {
+    if (!selectedRecord?.id || !selectedTeacherId) {
+      setMsg({
+        text: "Seleciona um professor antes de guardar.",
+        type: "warning",
+      });
+      return;
     }
 
-    const teacherIds = [
-      ...new Set((data || []).map((row) => row.teacher_user_id)),
-    ];
+    try {
+      setLoadingTeachers(true);
 
-    let teachersMap = {};
+      const data = await apiPost("/api/session/assign-teacher", {
+        sessionId: selectedRecord.id,
+        teacherUserId: selectedTeacherId,
+      });
 
-    if (teacherIds.length > 0) {
-      const { data: teacherProfiles, error: teacherProfilesError } =
-        await supabaseAdmin
-          .from("profiles")
-          .select("id, full_name, role")
-          .in("id", teacherIds);
+      if (data?.assigned) {
+        setMsg({
+          text: "Professor associado ao registo com sucesso.",
+          type: "success",
+        });
 
-      if (teacherProfilesError) {
-        return res.status(400).json({ error: teacherProfilesError.message });
+        setSelectedTeacherId("");
+        await loadSessionTeachers(selectedRecord.id);
+      }
+    } catch (error) {
+      console.error("ASSIGN TEACHER ERROR:", error);
+      setMsg({
+        text: error.message || "Erro ao associar professor.",
+        type: "warning",
+      });
+    } finally {
+      setLoadingTeachers(false);
+    }
+  }
+
+
+  async function removeTeacherFromSession(accessId) {
+    try {
+      setLoadingTeachers(true);
+
+      const data = await apiPost("/api/session/remove-teacher", {
+        accessId,
+      });
+
+      if (data?.removed) {
+        setMsg({
+          text: "Professor removido do registo.",
+          type: "success",
+        });
+
+        await loadSessionTeachers(selectedRecord.id);
+      }
+    } catch (error) {
+      console.error("REMOVE TEACHER ERROR:", error);
+      setMsg({
+        text: error.message || "Erro ao remover professor.",
+        type: "warning",
+      });
+    } finally {
+      setLoadingTeachers(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!session?.access_token) return;
+    //loadTeachers();   - temporario
+  }, [session]);
+
+
+  useEffect(() => {
+    if (!session?.access_token || !CAMERA_ID) return;
+
+    const channel = supabase
+      .channel(`em-capture-${CAMERA_ID}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "camera_state",
+          filter: `camera_id=eq.${CAMERA_ID}`,
+        },
+        () => {
+          loadData();
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "queue_entries",
+          filter: `camera_id=eq.${CAMERA_ID}`,
+        },
+        () => {
+          loadData();
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "clinical_sessions",
+        },
+        () => {
+          loadData();
+        }
+      )
+      .subscribe((status) => {
+        console.log("Realtime status:", status);
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [session?.access_token, CAMERA_ID, loadData]);
+
+
+  useEffect(() => {
+    if (!session?.access_token || !CAMERA_ID) return;
+
+    // enquanto o user está a preparar a sessão, não refrescar agressivamente
+    if (isCurrentUserReserved && isPreparingSession) return;
+
+    const interval = setInterval(async () => {
+      try {
+        await syncQueueState();
+        await loadData();
+      } catch (error) {
+        console.error("Polling error:", error);
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [
+    session?.access_token,
+    CAMERA_ID,
+    loadData,
+    isCurrentUserReserved,
+    isPreparingSession,
+  ]);
+  useEffect(() => {
+    async function handleExpiredTurn() {
+      if (
+        expiringTurn ||
+        cameraState?.status !== "reserved" ||
+        !myNotifiedEntry?.expires_at
+      ) {
+        if (
+          cameraState?.status !== "reserved" ||
+          !myNotifiedEntry?.expires_at
+        ) {
+          setTurnExpired(false);
+        }
+        return;
       }
 
-      teachersMap = Object.fromEntries(
-        (teacherProfiles || []).map((teacher) => [teacher.id, teacher])
-      );
+      const isExpired = new Date(myNotifiedEntry.expires_at) <= new Date();
+
+      if (!isExpired) {
+        setTurnExpired(false);
+        return;
+      }
+
+      setTurnExpired(true);
+      setExpiringTurn(true);
+
+      const result = await expireTurn();
+
+      if (result) {
+        await loadData();
+      }
+
+      setExpiringTurn(false);
     }
 
-    const result = (data || []).map((row) => ({
-      ...row,
-      teacher: teachersMap[row.teacher_user_id] || null,
-    }));
+    handleExpiredTurn();
+  }, [cameraState, myNotifiedEntry, loadData, expiringTurn]);
 
-    return res.json({ teachers: result });
-  } catch (err) {
-    console.error("GET SESSION TEACHERS ERROR:", err);
-    return res.status(500).json({ error: "Erro ao obter professores do registo." });
+  useEffect(() => {
+    if (isMyTurn && !isCurrentUserUsingCamera) {
+      setShowTurnModal(true);
+      setDraftBox("");
+      setDraftPatientCode("");
+    }
+  }, [isMyTurn, isCurrentUserUsingCamera]);
+
+
+  useEffect(() => {
+    if (!isMyTurn) {
+      setShowTurnModal(false);
+    }
+  }, [isMyTurn]);
+
+  async function joinQueue() {
+    setMsg("");
+    try {
+      const data = await apiPost("/api/queue/join", { cameraId: CAMERA_ID });
+      setMsg({
+        text: `Entraste na fila com sucesso. ID: ${data.queueEntryId}`,
+        type: "success"
+      });
+      await loadData();
+    } catch (error) {
+      console.error("QUEUE JOIN ERROR:", error);
+      setMsg(error.message);
+    }
   }
-});
 
-app.post("/api/session/remove-teacher", requireAuth, async (req, res) => {
-  try {
-    const { accessId } = req.body;
-    const userId = req.user.id;
-
-    if (!accessId) {
-      return res.status(400).json({ error: "accessId é obrigatório." });
+  async function cancelQueue() {
+    setMsg("");
+    try {
+      await apiPost("/api/queue/cancel", { cameraId: CAMERA_ID });
+      setMsg({
+        text: "Saíste da fila com sucesso.",
+        type: "success",
+      });
+      await loadData();
+    } catch (error) {
+      console.error("QUEUE CANCEL ERROR:", error);
+      setMsg(error.message);
     }
+  }
 
-    const { data: accessRow, error: accessError } = await supabaseAdmin
-      .from("session_record_access")
-      .select("id, session_id")
-      .eq("id", accessId)
-      .single();
 
-    if (accessError || !accessRow) {
-      return res.status(404).json({ error: "Acesso não encontrado." });
-    }
+  async function startSession() {
+    try {
+      setMsg("");
 
-    const { data: sessionData, error: sessionError } = await supabaseAdmin
-      .from("clinical_sessions")
-      .select("id, user_id")
-      .eq("id", accessRow.session_id)
-      .single();
+      const data = await apiPost("/api/session/start", {
+        cameraId: CAMERA_ID,
+        box: draftBox,
+        workUnit: draftWorkUnit,
+        patientCode: draftPatientCode,
+      });
 
-    if (sessionError || !sessionData) {
-      return res.status(404).json({ error: "Sessão não encontrada." });
-    }
+      if (data.started) {
+        setMsg({
+          text: "Sessão iniciada com sucesso.",
+          type: "success",
+        });
 
-    const isAdmin = await canAdminEmCapture(userId);
-    const isOwner = sessionData.user_id === userId;
+        setDraftBox("");
+        setDraftWorkUnit("");
+        setDraftPatientCode("");
+        setShowTurnModal(false);
 
-    if (!isAdmin && !isOwner) {
-      return res.status(403).json({
-        error: "Sem permissão para remover este professor.",
+        await loadData();
+      }
+    } catch (error) {
+      console.error("START SESSION ERROR:", error);
+      setMsg({
+        text: error.message,
+        type: "warning",
       });
     }
-
-    const { error: deleteError } = await supabaseAdmin
-      .from("session_record_access")
-      .delete()
-      .eq("id", accessId);
-
-    if (deleteError) {
-      return res.status(400).json({ error: deleteError.message });
-    }
-
-    return res.json({ removed: true });
-  } catch (err) {
-    console.error("REMOVE TEACHER ERROR:", err);
-    return res.status(500).json({ error: "Erro ao remover professor." });
   }
-});
+
+  async function pauseSession() {
+    setMsg("");
+    try {
+      const data = await apiPost("/api/session/pause", {
+        cameraId: CAMERA_ID,
+      });
 
 
-app.get("/api/teacher/records", requireAuth, async (req, res) => {
-  try {
-    const userId = req.user.id;
+      setMsg(
+        data.paused
+          ? { text: "Sessão pausada com sucesso.", type: "info" }
+          : { text: "Não foi possível pausar a sessão.", type: "warning" }
+      );
+      await loadData();
+    } catch (error) {
+      console.error("PAUSE SESSION ERROR:", error);
+      setMsg({ text: error.message, type: "warning" });
+    }
+  }
 
-    const { data: accessRows, error: accessError } = await supabaseAdmin
-      .from("session_record_access")
-      .select("session_id")
-      .eq("teacher_user_id", userId);
+  async function resumeSession(record) {
+    setMsg({ text: "", type: "" });
 
-    if (accessError) {
-      return res.status(400).json({ error: accessError.message });
+    if (!record?.id) {
+      setMsg({
+        text: "Não foi possível identificar a sessão a retomar.",
+        type: "warning",
+      });
+      return;
     }
 
-    const sessionIds = (accessRows || []).map((row) => row.session_id);
+    const recordBox = record.box || "";
+    const recordWorkUnit = record.work_unit || record.workUnit || "";
+    const recordPatientCode = record.patient_code || record.patientCode || "";
 
-    if (sessionIds.length === 0) {
-      return res.json({ records: [] });
+    try {
+      const data = await apiPost("/api/session/resume", {
+        cameraId: CAMERA_ID,
+        sessionId: record.id,
+      });
+
+      if (data.resumed) {
+        const resumedSession = data.session || {
+          ...record,
+          status: "open",
+          box: recordBox,
+          work_unit: recordWorkUnit,
+          patient_code: recordPatientCode,
+        };
+
+        setCurrentSession(resumedSession);
+        setBox(resumedSession.box || recordBox);
+        setWorkUnit(resumedSession.work_unit || recordWorkUnit);
+        setPatientCode(resumedSession.patient_code || recordPatientCode);
+
+        setDraftBox("");
+        setDraftWorkUnit("");
+        setDraftPatientCode("");
+        setPendingResumeRecord(null);
+        setStartSessionMode("start");
+        setShowStartSessionModal(false);
+        setShowTurnModal(false);
+
+        setMsg({
+          text: "Sessão retomada com sucesso.",
+          type: "success",
+        });
+      } else {
+        setMsg({
+          text: "Não foi possível retomar a sessão.",
+          type: "warning",
+        });
+      }
+
+      await loadData();
+      closeRecordModal();
+    } catch (error) {
+      console.error("RESUME SESSION ERROR:", error);
+      setMsg({ text: error.message, type: "warning" });
     }
+  }
 
-    const { data: sessions, error: sessionsError } = await supabaseAdmin
-      .from("clinical_sessions")
-      .select("*")
-      .in("id", sessionIds)
-      .order("started_at", { ascending: false });
+  async function stopSession() {
+    setMsg("");
+    try {
+      const data = await apiPost("/api/session/stop", {
+        cameraId: CAMERA_ID,
+      });
 
-    if (sessionsError) {
-      return res.status(400).json({ error: sessionsError.message });
+      setMsg(
+        data.stopped
+          ? { text: "Sessão encerrada com sucesso.", type: "success" }
+          : { text: "Não foi possível encerrar a sessão.", type: "warning" }
+      );
+      await loadData();
+    } catch (error) {
+      console.error("STOP SESSION ERROR:", error);
+      setMsg({ text: error.message, type: "warning" });
     }
+  }
 
-    const userIds = [
-      ...new Set(
-        (sessions || [])
-          .flatMap((s) => [s.user_id, s.archived_by_user_id])
-          .filter(Boolean)
-      ),
-    ];
+  async function saveSessionData() {
+    try {
+      await apiPost("/api/session/update", {
+        sessionId: currentSession.id,
+        box,
+        workUnit,
+        patientCode,
+      });
 
-    const { data: profiles } = await supabaseAdmin
-      .from("profiles")
-      .select("id, full_name")
-      .in("id", userIds);
+      setIsEditingSessionData(false);
 
-    const profilesMap = {};
-    (profiles || []).forEach((p) => {
-      profilesMap[p.id] = p.full_name || p.id;
+      setMsg({
+        text: "Dados da sessão atualizados com sucesso.",
+        type: "success",
+      });
+
+      await loadData();
+    } catch (err) {
+      console.error("Erro ao atualizar sessão:", err);
+      setMsg({
+        text: err.message || "Erro ao atualizar sessão.",
+        type: "warning",
+      });
+    }
+  }
+
+  function startRecordEdit() {
+    if (!selectedRecord) return;
+
+    setRecordEditForm({
+      patientCode: selectedRecord.patient_code || "",
+      box: selectedRecord.box || "",
+      workUnit: selectedRecord.work_unit || "",
     });
 
-    const sessionIdsForPhotos = (sessions || []).map((s) => s.id);
+    setIsEditingRecordData(true);
+  }
 
-    const { data: photos } = await supabaseAdmin
-      .from("session_photos")
-      .select("session_id, id")
-      .in("session_id", sessionIdsForPhotos);
+  function cancelRecordEdit() {
+    if (!selectedRecord) return;
 
-    const photoCountMap = {};
-    (photos || []).forEach((photo) => {
-      photoCountMap[photo.session_id] =
-        (photoCountMap[photo.session_id] || 0) + 1;
+    setRecordEditForm({
+      patientCode: selectedRecord.patient_code || "",
+      box: selectedRecord.box || "",
+      workUnit: selectedRecord.work_unit || "",
     });
 
-    const records = (sessions || []).map((session) => ({
-      ...session,
-      user_name: profilesMap[session.user_id] || session.user_id,
-      archived_by_name:
-        profilesMap[session.archived_by_user_id] || session.archived_by_user_id || null,
-      photos_count: photoCountMap[session.id] || 0,
-    }));
-
-    return res.json({ records });
-  } catch (err) {
-    console.error("GET TEACHER RECORDS ERROR:", err);
-    return res.status(500).json({ error: "Erro ao carregar registos do professor." });
+    setIsEditingRecordData(false);
   }
-});
 
+  async function saveRecordData() {
+    if (!selectedRecord?.id) return;
 
-app.get("/api/session/:sessionId/photos", requireAuth, async (req, res) => {
-  try {
-    const { sessionId } = req.params;
-    const userId = req.user.id;
-
-    const { data: sessionData, error: sessionError } = await supabaseAdmin
-      .from("clinical_sessions")
-      .select("id, user_id")
-      .eq("id", sessionId)
-      .single();
-
-    if (sessionError || !sessionData) {
-      return res.status(404).json({ error: "Sessão não encontrada." });
+    if (!recordEditForm.patientCode.trim()) {
+      setMsg({
+        text: "O código do paciente é obrigatório.",
+        type: "warning",
+      });
+      return;
     }
 
-    const isOwner = sessionData.user_id === userId;
-    const isAdmin = await canAdminEmCapture(userId);
-
-    const { data: accessRow } = await supabaseAdmin
-      .from("session_record_access")
-      .select("id")
-      .eq("session_id", sessionId)
-      .eq("teacher_user_id", userId)
-      .maybeSingle();
-
-    const hasTeacherAccess = !!accessRow;
-
-    if (!isOwner && !isAdmin && !hasTeacherAccess) {
-      return res.status(403).json({ error: "Sem acesso a este registo." });
+    if (!recordEditForm.box.trim()) {
+      setMsg({
+        text: "A Box é obrigatória.",
+        type: "warning",
+      });
+      return;
     }
 
-    const { data: photos, error: photosError } = await supabaseAdmin
-      .from("session_photos")
-      .select("*")
-      .eq("session_id", sessionId)
-      .order("captured_at", { ascending: false });
+    try {
+      setSavingRecordData(true);
 
-    if (photosError) {
-      return res.status(400).json({ error: photosError.message });
-    }
+      const data = await apiPost("/api/session/update", {
+        sessionId: selectedRecord.id,
+        patientCode: recordEditForm.patientCode.trim(),
+        box: recordEditForm.box.trim(),
+        workUnit: recordEditForm.workUnit.trim(),
+      });
 
-    return res.json({ photos: photos || [] });
-  } catch (err) {
-    console.error("GET SESSION PHOTOS ERROR:", err);
-    return res.status(500).json({ error: "Erro ao carregar fotografias." });
-  }
-});
+      if (!data?.updated) {
+        throw new Error(data?.error || "Não foi possível atualizar o registo.");
+      }
 
-app.get("/api/admin/users", requireAuth, requireGlobalAdmin, async (req, res) => {
-  try {
-    const { data: profiles, error: profilesError } = await supabaseAdmin
-      .from("profiles")
-      .select("*")
-      .order("created_at", { ascending: false });
+      const updatedRecord = {
+        ...selectedRecord,
+        patient_code:
+          data.session?.patient_code ?? recordEditForm.patientCode.trim(),
+        box: data.session?.box ?? recordEditForm.box.trim(),
+        work_unit: data.session?.work_unit ?? recordEditForm.workUnit.trim(),
+        updated_at: data.session?.updated_at ?? new Date().toISOString(),
+      };
 
-    if (profilesError) {
-      return res.status(400).json({ error: profilesError.message });
-    }
+      setSelectedRecord(updatedRecord);
 
-    const { data: authUsersData, error: authUsersError } =
-      await supabaseAdmin.auth.admin.listUsers();
-
-    if (authUsersError) {
-      return res.status(400).json({ error: authUsersError.message });
-    }
-
-    const authUsersMap = {};
-    (authUsersData?.users || []).forEach((user) => {
-      authUsersMap[user.id] = user.email;
-    });
-
-    const { data: moduleAccess, error: moduleError } = await supabaseAdmin
-      .from("user_module_access")
-      .select(`
-        user_id,
-        role,
-        platform_modules (
-          code,
-          name
+      setMyRecords((records) =>
+        records.map((record) =>
+          record.id === updatedRecord.id ? { ...record, ...updatedRecord } : record
         )
-      `);
-
-    if (moduleError) {
-      return res.status(400).json({ error: moduleError.message });
-    }
-
-    const users = (profiles || []).map((profile) => ({
-      ...profile,
-      email: authUsersMap[profile.id] || null,
-      modules: (moduleAccess || []).filter((item) => item.user_id === profile.id),
-    }));
-
-    return res.json({ users });
-  } catch (error) {
-    console.error("ADMIN USERS ERROR:", error);
-    return res.status(500).json({ error: "Erro ao carregar utilizadores." });
-  }
-});
-
-app.get("/api/admin/users", async (req, res) => {
-  try {
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("id, full_name, email, role");
-
-    if (error) {
-      return res.status(500).json({ error: error.message });
-    }
-
-    res.json({
-      users: data || [],
-    });
-  } catch (err) {
-    res.status(500).json({ error: "Erro interno" });
-  }
-});
-
-app.get("/api/admin/users", async (req, res) => {
-  const token = req.headers.authorization?.split(" ")[1];
-
-  if (!token) {
-    return res.status(401).json({ error: "No token" });
-  }
-
-  // validar token com supabase
-  const { data: userData } = await supabase.auth.getUser(token);
-
-  if (!userData?.user) {
-    return res.status(401).json({ error: "Invalid token" });
-  }
-
-  // buscar profile
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", userData.user.id)
-    .single();
-
-  if (profile?.role !== "global_admin") {
-    return res.status(403).json({ error: "Sem permissão" });
-  }
-
-  // buscar users
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id, full_name, email, role");
-
-  res.json({ users: data || [] });
-});
-
-
-app.get("/api/admin/modules", requireAuth, requireGlobalAdmin, async (req, res) => {
-  try {
-    const { data, error } = await supabaseAdmin
-      .from("platform_modules")
-      .select("id, code, name, description")
-      .order("name", { ascending: true });
-
-    if (error) return res.status(400).json({ error: error.message });
-
-    return res.json({ modules: data || [] });
-  } catch (error) {
-    console.error("ADMIN MODULES ERROR:", error);
-    return res.status(500).json({ error: "Erro ao carregar módulos." });
-  }
-});
-
-
-app.post("/api/admin/users/update", requireAuth, requireGlobalAdmin, async (req, res) => {
-  try {
-    const {
-      userId,
-      fullName,
-      phone,
-      jobTitle,
-      department,
-      role,
-    } = req.body;
-
-    if (!userId) {
-      return res.status(400).json({ error: "userId é obrigatório." });
-    }
-
-    const { error } = await supabaseAdmin
-      .from("profiles")
-      .update({
-        full_name: fullName,
-        phone,
-        job_title: jobTitle,
-        department,
-        role,
-      })
-      .eq("id", userId);
-
-    if (error) {
-      return res.status(400).json({ error: error.message });
-    }
-
-    return res.json({ updated: true });
-  } catch (error) {
-    console.error("UPDATE ADMIN USER ERROR:", error);
-    return res.status(500).json({ error: "Erro ao atualizar utilizador." });
-  }
-});
-
-app.post("/api/admin/users/reset-password", requireAuth, requireGlobalAdmin, async (req, res) => {
-  try {
-    const { userId, newPassword } = req.body;
-
-    if (!userId || !newPassword) {
-      return res.status(400).json({
-        error: "userId e newPassword são obrigatórios.",
-      });
-    }
-
-    if (newPassword.length < 6) {
-      return res.status(400).json({
-        error: "A password deve ter pelo menos 6 caracteres.",
-      });
-    }
-
-    const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
-      password: newPassword,
-    });
-
-    if (error) {
-      return res.status(400).json({ error: error.message });
-    }
-
-    return res.json({ updated: true });
-  } catch (error) {
-    console.error("RESET PASSWORD ERROR:", error);
-    return res.status(500).json({ error: "Erro ao alterar password." });
-  }
-});
-
-app.post("/api/session/archive", requireAuth, async (req, res) => {
-  try {
-    const { sessionId } = req.body;
-    const userId = req.user.id;
-
-    if (!sessionId) {
-      return res.status(400).json({ error: "sessionId is required" });
-    }
-
-    const { data: sessionData, error: sessionError } = await supabaseAdmin
-      .from("clinical_sessions")
-      .select("id, user_id, is_archived")
-      .eq("id", sessionId)
-      .single();
-
-    if (sessionError || !sessionData) {
-      return res.status(404).json({ error: "Registo não encontrado." });
-    }
-
-    const { data: profileData, error: profileError } = await supabaseAdmin
-      .from("profiles")
-      .select("role")
-      .eq("id", userId)
-      .single();
-
-    if (profileError) {
-      return res.status(400).json({ error: profileError.message });
-    }
-
-    const isGlobalAdmin = profileData?.role === "global_admin";
-
-    if (!isGlobalAdmin && sessionData.user_id !== userId) {
-      return res.status(403).json({ error: "Sem permissão para arquivar este registo." });
-    }
-
-    const { error: archiveError } = await supabaseAdmin
-      .from("clinical_sessions")
-      .update({
-        is_archived: true,
-        archived_at: new Date().toISOString(),
-        archived_by_user_id: userId,
-      })
-      .eq("id", sessionId);
-
-    if (archiveError) {
-      return res.status(400).json({ error: archiveError.message });
-    }
-
-    return res.json({ archived: true });
-  } catch (err) {
-    console.error("ARCHIVE SESSION ERROR:", err);
-    return res.status(500).json({ error: "Erro ao arquivar registo." });
-  }
-});
-
-app.post("/api/session/restore", requireAuth, async (req, res) => {
-  try {
-    const { sessionId } = req.body;
-    const userId = req.user.id;
-
-    if (!sessionId) {
-      return res.status(400).json({ error: "sessionId is required" });
-    }
-
-    const { data: profileData, error: profileError } = await supabaseAdmin
-      .from("profiles")
-      .select("role")
-      .eq("id", userId)
-      .single();
-
-    if (profileError) {
-      return res.status(400).json({ error: profileError.message });
-    }
-    const isAdmin = await canAdminEmCapture(userId);
-
-    if (!isAdmin) {
-      return res.status(403).json({
-        error: "Só admins podem restaurar registos.",
-      });
-    }
-
-    const { error: restoreError } = await supabaseAdmin
-      .from("clinical_sessions")
-      .update({
-        is_archived: false,
-        archived_at: null,
-        archived_by_user_id: null,
-      })
-      .eq("id", sessionId);
-
-    if (restoreError) {
-      return res.status(400).json({ error: restoreError.message });
-    }
-
-    return res.json({ restored: true });
-  } catch (err) {
-    console.error("RESTORE SESSION ERROR:", err);
-    return res.status(500).json({ error: "Erro ao restaurar registo." });
-  }
-});
-
-app.post("/api/session/delete-permanently", requireAuth, async (req, res) => {
-  try {
-    const { sessionId } = req.body;
-    const userId = req.user.id;
-
-    if (!sessionId) {
-      return res.status(400).json({ error: "sessionId is required" });
-    }
-
-    const { data: profileData, error: profileError } = await supabaseAdmin
-      .from("profiles")
-      .select("role")
-      .eq("id", userId)
-      .single();
-
-    if (profileError) {
-      return res.status(400).json({ error: profileError.message });
-    }
-
-    const isAdmin = await canAdminEmCapture(userId);
-
-    if (!isAdmin) {
-      return res.status(403).json({
-        error: "Só admins podem eliminar registos definitivamente.",
-      });
-    }
-    const { error: deletePhotosError } = await supabaseAdmin
-      .from("session_photos")
-      .delete()
-      .eq("session_id", sessionId);
-
-    if (deletePhotosError) {
-      return res.status(400).json({ error: deletePhotosError.message });
-    }
-
-    const { error: deleteSessionError } = await supabaseAdmin
-      .from("clinical_sessions")
-      .delete()
-      .eq("id", sessionId);
-
-    if (deleteSessionError) {
-      return res.status(400).json({ error: deleteSessionError.message });
-    }
-
-    return res.json({ deleted: true });
-  } catch (err) {
-    console.error("DELETE SESSION ERROR:", err);
-    return res.status(500).json({ error: "Erro ao eliminar registo definitivamente." });
-  }
-});
-
-app.post("/api/admin/create-user", requireAuth, requireGlobalAdmin, async (req, res) => {
-  try {
-    const {
-      email,
-      password,
-      full_name,
-      role = "user",
-      phone,
-      job_title,
-      department,
-    } = req.body;
-
-    if (!email || !password || !full_name) {
-      return res.status(400).json({
-        error: "Nome, email e password são obrigatórios.",
-      });
-    }
-
-    if (password.length < 6) {
-      return res.status(400).json({
-        error: "A password deve ter pelo menos 6 caracteres.",
-      });
-    }
-
-    const { data: authUser, error: authError } =
-      await supabaseAdmin.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: true,
-        user_metadata: {
-          full_name,
-        },
-      });
-
-    if (authError) {
-      return res.status(400).json({ error: authError.message });
-    }
-
-    const userId = authUser.user.id;
-
-    const { error: profileError } = await supabaseAdmin
-      .from("profiles")
-      .upsert(
-        {
-          id: userId,
-          full_name,
-          role,
-          phone: phone || null,
-          job_title: job_title || null,
-          department: department || null,
-        },
-        { onConflict: "id" }
       );
 
-    if (profileError) {
-      return res.status(400).json({ error: profileError.message });
-    }
+      setAllRecords((records) =>
+        records.map((record) =>
+          record.id === updatedRecord.id ? { ...record, ...updatedRecord } : record
+        )
+      );
 
-    return res.json({
-      created: true,
-      userId,
-    });
-  } catch (err) {
-    console.error("CREATE USER ERROR:", err);
-    return res.status(500).json({ error: "Erro interno ao criar utilizador." });
+      setTeacherRecords((records) =>
+        records.map((record) =>
+          record.id === updatedRecord.id ? { ...record, ...updatedRecord } : record
+        )
+      );
+
+      setIsEditingRecordData(false);
+
+      setMsg({
+        text: "Registo atualizado com sucesso.",
+        type: "success",
+      });
+
+      await loadData();
+    } catch (err) {
+      console.error("SAVE RECORD DATA ERROR:", err);
+      setMsg({
+        text: err.message || "Erro ao atualizar registo.",
+        type: "warning",
+      });
+    } finally {
+      setSavingRecordData(false);
+    }
   }
-});
 
-app.post("/api/admin/users/module-access", requireAuth, requireGlobalAdmin, async (req, res) => {
-  try {
-    const { userId, moduleCode, role } = req.body;
+  async function uploadPhoto() {
+    try {
+      if (!selectedFile || !cameraState?.camera_id && !CAMERA_ID) return;
 
-    if (!userId || !moduleCode || !role) {
-      return res.status(400).json({
-        error: "userId, moduleCode e role são obrigatórios.",
+      setUploadingPhoto(true);
+
+      const formData = new FormData();
+      formData.append("photo", selectedFile);
+      formData.append("cameraId", CAMERA_ID);
+      formData.append("phase", photoPhase);
+
+      const accessToken = await getApiAccessToken();
+
+      const response = await fetch(`${API_BASE_URL}/api/photos/ingest`, {
+        method: "POST",
+        headers: accessToken
+          ? {
+            Authorization: `Bearer ${accessToken}`,
+          }
+          : {},
+        body: formData,
       });
+
+      const text = await response.text();
+      let data;
+
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error("O backend devolveu uma resposta inválida.");
+      }
+
+      if (!response.ok) {
+        throw new Error(data.error || "Erro ao carregar fotografia.");
+      }
+
+      setMsg({
+        text: "Fotografia carregada com sucesso.",
+        type: "success",
+      });
+
+      setSelectedFile(null);
+      await loadData();
+    } catch (error) {
+      console.error("UPLOAD PHOTO ERROR:", error);
+      setMsg({
+        text: error.message || "Erro ao carregar fotografia.",
+        type: "warning",
+      });
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
+
+  async function openPhoto(path) {
+    const { data, error } = await supabase.storage
+      .from(PHOTO_BUCKET)
+      .createSignedUrl(path, 60);
+
+    if (error || !data?.signedUrl) {
+      setMsg("Não foi possível abrir a fotografia.");
+      return;
     }
 
-    const allowedRoles = ["user", "module_admin"];
+    window.open(data.signedUrl, "_blank");
+  }
 
-    if (!allowedRoles.includes(role)) {
-      return res.status(400).json({
-        error: "Role de módulo inválida.",
-      });
+  async function getSignedPhotoUrl(path) {
+    const { data, error } = await supabase.storage
+      .from(PHOTO_BUCKET)
+      .createSignedUrl(path, 60);
+
+    if (error || !data?.signedUrl) {
+      return null;
     }
 
-    const { data: moduleData, error: moduleError } = await supabaseAdmin
-      .from("platform_modules")
-      .select("id")
-      .eq("code", moduleCode)
-      .single();
+    return data.signedUrl;
+  }
 
-    if (moduleError || !moduleData) {
-      return res.status(404).json({
-        error: "Módulo não encontrado.",
-      });
+  async function openRecordModal(record) {
+    setSelectedRecord(record);
+    setIsEditingRecordData(false);
+    setSavingRecordData(false);
+    setRecordEditForm({
+      patientCode: record?.patient_code || "",
+      box: record?.box || "",
+      workUnit: record?.work_unit || "",
+    });
+
+    const photosResponse = await apiGet(`/api/session/${record.id}/photos`);
+    const recordPhotos = photosResponse.photos || [];
+    const error = null;
+
+    if (error) {
+      console.error("Erro ao carregar fotos do registo:", error);
+      setSelectedRecordPhotos([]);
+      setPhotoPreviewMap({});
+    } else {
+      const photos = recordPhotos || [];
+      setSelectedRecordPhotos(photos);
+
+      const previewEntries = await Promise.all(
+        photos.map(async (photo) => {
+          const url = await getSignedPhotoUrl(photo.storage_path);
+          return [photo.id, url];
+        })
+      );
+
+      const previewMap = Object.fromEntries(previewEntries);
+      setPhotoPreviewMap(previewMap);
     }
 
-    const { error } = await supabaseAdmin
-      .from("user_module_access")
-      .upsert(
-        {
-          user_id: userId,
-          module_id: moduleData.id,
-          role,
-        },
-        {
-          onConflict: "user_id,module_id",
+    // 👉 NOVO
+    await loadTeachers();
+    await loadSessionTeachers(record.id);
+
+    setIsRecordModalOpen(true);
+  }
+
+  async function updatePhase(phase) {
+    try {
+      const data = await apiPost("/api/camera/phase", {
+        cameraId: CAMERA_ID,
+        phase,
+      });
+
+      if (data.updated) {
+        setCurrentPhase(phase);
+        await loadData();
+      }
+    } catch (error) {
+      console.error("UPDATE PHASE ERROR:", error);
+      setMsg({
+        text: error.message,
+        type: "warning",
+      });
+    }
+  }
+
+  async function confirmStopSession() {
+    setShowStopConfirmModal(false);
+    await stopSession();
+  }
+
+
+  async function archiveRecord(sessionId) {
+    try {
+      setRecordActionLoadingId(sessionId);
+
+      const data = await apiPost("/api/session/archive", { sessionId });
+
+      if (data?.archived) {
+        setMsg({
+          text: "Registo arquivado com sucesso.",
+          type: "success",
+        });
+
+        await loadData();
+
+        if (selectedRecord?.id === sessionId) {
+          closeRecordModal();
         }
-      );
+      } else {
+        throw new Error(data?.error || "Erro ao arquivar registo.");
+      }
+    } catch (error) {
+      console.error("ARCHIVE RECORD ERROR:", error);
 
-    if (error) {
-      return res.status(400).json({ error: error.message });
+      setMsg({
+        text: error.message || "Erro ao arquivar registo.",
+        type: "warning",
+      });
+    } finally {
+      setRecordActionLoadingId(null);
     }
+  }
 
-    return res.json({ updated: true });
-  } catch (error) {
-    console.error("MODULE ACCESS ERROR:", error);
-    return res.status(500).json({
-      error: "Erro ao atualizar acesso ao módulo.",
+  async function restoreRecord(sessionId) {
+    try {
+      setRecordActionLoadingId(sessionId);
+
+      const data = await apiPost("/api/session/restore", { sessionId });
+
+      if (data?.restored) {
+        setMsg({
+          text: "Registo restaurado com sucesso.",
+          type: "success",
+        });
+
+        await loadData();
+      } else {
+        throw new Error(data?.error || "Erro ao restaurar registo.");
+      }
+    } catch (error) {
+      console.error("RESTORE RECORD ERROR:", error);
+
+      setMsg({
+        text: error.message || "Erro ao restaurar registo.",
+        type: "warning",
+      });
+    } finally {
+      setRecordActionLoadingId(null);
+    }
+  }
+
+  async function deleteRecordPermanently(sessionId) {
+    try {
+      setRecordActionLoadingId(sessionId);
+
+      const data = await apiPost("/api/session/delete-permanently", {
+        sessionId,
+      });
+
+      if (data?.deleted) {
+        setMsg({
+          text: "Registo eliminado definitivamente.",
+          type: "success",
+        });
+
+        await loadData();
+
+        if (selectedRecord?.id === sessionId) {
+          closeRecordModal();
+        }
+      } else {
+        throw new Error(data?.error || "Erro ao eliminar registo.");
+      }
+    } catch (error) {
+      console.error("DELETE RECORD ERROR:", error);
+
+      setMsg({
+        text: error.message || "Erro ao eliminar registo.",
+        type: "warning",
+      });
+    } finally {
+      setRecordActionLoadingId(null);
+    }
+  }
+
+
+  function closeRecordModal() {
+    setIsRecordModalOpen(false);
+    setSelectedRecord(null);
+    setSelectedRecordPhotos([]);
+    setPhotoPreviewMap({});
+    setIsEditingRecordData(false);
+    setSavingRecordData(false);
+    setRecordEditForm({
+      patientCode: "",
+      box: "",
+      workUnit: "",
     });
   }
-});
 
-app.post("/api/admin/users/remove-module-access", requireAuth, requireGlobalAdmin, async (req, res) => {
-  try {
-    const { userId, moduleCode } = req.body;
+  return (
+    <div className="app-shell">
+      <div className="top-actions">
+        <div className="user-meta">
+          <div className="user-email">{session.user.email}</div>
+        </div>
 
-    if (!userId || !moduleCode) {
-      return res.status(400).json({
-        error: "userId e moduleCode são obrigatórios.",
-      });
-    }
+        <button className="soft-btn" onClick={() => navigate("/app")}>
+          Voltar
+        </button>
 
-    const { data: moduleData, error: moduleError } = await supabaseAdmin
-      .from("platform_modules")
-      .select("id")
-      .eq("code", moduleCode)
-      .single();
+        {session?.auth_provider !== "portalsmart" && (
+          <button className="secondary-btn" onClick={logout}>
+            Sair
+          </button>
+        )}
 
-    if (moduleError || !moduleData) {
-      return res.status(404).json({
-        error: "Módulo não encontrado.",
-      });
-    }
+        <button
+          type="button"
+          onClick={() => navigate("/app/profile")}
+          style={{
+            background: "#eef4fb",
+            color: "#1e4a8d",
+            border: "none",
+            padding: "10px 16px",
+            borderRadius: 12,
+            fontWeight: 700,
+            cursor: "pointer",
+          }}
+        >
+          Perfil
+        </button>
 
-    const { error } = await supabaseAdmin
-      .from("user_module_access")
-      .delete()
-      .eq("user_id", userId)
-      .eq("module_id", moduleData.id);
+      </div>
 
-    if (error) {
-      return res.status(400).json({ error: error.message });
-    }
+      <section
+        className="card"
+        style={{
+          padding: "34px 36px",
+          marginBottom: 28,
+          background: "linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%)",
+        }}
+      >
+        <div className="badge badge-blue" style={{ width: "fit-content", marginBottom: 18 }}>
+          EM Capture
+        </div>
 
-    return res.json({ removed: true });
-  } catch (error) {
-    console.error("REMOVE MODULE ACCESS ERROR:", error);
-    return res.status(500).json({
-      error: "Erro ao remover acesso ao módulo.",
-    });
-  }
-});
+        <h1
+          style={{
+            margin: 0,
+            color: "#1e4a8d",
+            fontSize: "2.7rem",
+            lineHeight: 1.05,
+            fontWeight: 800,
+          }}
+        >
+          Gestão da Câmara Clínica
+        </h1>
+
+        <p
+          style={{
+            marginTop: 18,
+            marginBottom: 0,
+            color: "#5f6b7a",
+            fontSize: "1.15rem",
+            maxWidth: 900,
+          }}
+        >
+          Gestão de fila, início direto da sessão, pausa, encerramento e
+          preparação para registo fotográfico estruturado.
+        </p>
+      </section>
+
+      <section
+        className="card"
+        style={{
+          padding: 26,
+          marginBottom: 28,
+          background: "linear-gradient(180deg, #ffffff 0%, #fbfcff 100%)",
+        }}
+      >
+
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div
+            style={{
+              width: 42,
+              height: 42,
+              borderRadius: "50%",
+              background: "#eef4ff",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 22,
+            }}
+          >
+            ⚡
+          </div>
+
+          <div>
+            <h2 style={{ margin: 0, color: "#1e4a8d", fontSize: "1.7rem" }}>
+              Ações rápidas
+            </h2>
+            <p style={{ color: "#5f6b7a", margin: "6px 0 0" }}>
+              Controle da fila e do ciclo da sessão atual.
+            </p>
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+            gap: 18,
+            marginTop: 28,
+          }}
+        >
+          <button
+            type="button"
+            onClick={joinQueue}
+            disabled={!canManageQueue}
+            style={{
+              minHeight: 92,
+              borderRadius: 16,
+              border: "1px solid #b9cdf5",
+              background: "#f8fbff",
+              color: "#1e4a8d",
+              fontWeight: 900,
+              cursor: canManageQueue ? "pointer" : "not-allowed",
+              opacity: canManageQueue ? 1 : 0.82,
+            }}
+          >
+            <div style={{ fontSize: 24, marginBottom: 6 }}>👥</div>
+            Entrar na fila
+            <div style={{ fontSize: 12, fontWeight: 500, marginTop: 4 }}>
+              Colocar-se na fila de espera
+            </div>
+            <div
+              onClick={(e) => {
+                e.stopPropagation();
+                cancelQueue();
+              }}
+              style={{
+                marginTop: 10,
+                fontSize: 13,
+                fontWeight: 800,
+                color: "#1e4a8d",
+                textDecoration: "underline",
+                cursor: canManageQueue ? "pointer" : "not-allowed",
+                opacity: canManageQueue ? 1 : 0.5,
+              }}
+            >
+              Cancelar fila
+            </div>
+          </button>
+          
+          <button
+            type="button"
+            onClick={() => setShowStartSessionModal(true)}
+            disabled={!canStartSessionFinal}
+            style={{
+              minHeight: 92,
+              borderRadius: 16,
+              border: "1px solid #b7ebc9",
+              background: "#f5fff8",
+              color: "#0f9f55",
+              fontWeight: 900,
+              cursor: canStartSessionFinal ? "pointer" : "not-allowed",
+              opacity: canStartSessionFinal ? 1 : 0.82,
+            }}
+          >
+            <div style={{ fontSize: 24, marginBottom: 6 }}>▶️</div>
+            Iniciar sessão
+            <div style={{ fontSize: 12, fontWeight: 500, marginTop: 4 }}>
+              Iniciar sessão clínica
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={pauseSession}
+            disabled={!canPauseOrStop}
+            style={{
+              minHeight: 92,
+              borderRadius: 16,
+              border: "1px solid #ffd89a",
+              background: "#fffaf0",
+              color: "#d97706",
+              fontWeight: 900,
+              cursor: canPauseOrStop ? "pointer" : "not-allowed",
+              opacity: canPauseOrStop ? 1 : 0.82,
+            }}
+          >
+            <div style={{ fontSize: 24, marginBottom: 6 }}>⏸️</div>
+            Pausar sessão
+            <div style={{ fontSize: 12, fontWeight: 500, marginTop: 4 }}>
+              Pausar sessão ativa
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowStopConfirmModal(true)}
+            disabled={!canStopSession}
+            style={{
+              minHeight: 92,
+              borderRadius: 16,
+              border: "1px solid #ffb4b4",
+              background: "#fff7f7",
+              color: "#dc2626",
+              fontWeight: 900,
+              cursor: canStopSession ? "pointer" : "not-allowed",
+              opacity: canStopSession ? 1 : 0.82,
+            }}
+          >
+            <div style={{ fontSize: 24, marginBottom: 6 }}>⏹️</div>
+            Concluir sessão
+            <div style={{ fontSize: 12, fontWeight: 500, marginTop: 4 }}>
+              Encerrar e finalizar
+            </div>
+          </button>
+        </div> 
+
+        {isMyTurn && (
+          <div
+            style={{
+              marginTop: 18,
+              padding: "12px 14px",
+              borderRadius: 14,
+              background: "#eef6ff",
+              border: "1px solid #cfe3ff",
+              color: "#1e4a8d",
+              fontWeight: 700,
+            }}
+          >
+            ℹ️ É a tua vez. Clica em “Iniciar sessão” para preencher os dados clínicos.
+          </div>
+        )}
+
+        {turnExpired && (
+          <div
+            style={{
+              marginTop: 18,
+              padding: "12px 14px",
+              borderRadius: 14,
+              background: "#fff7e6",
+              border: "1px solid #ffe0a6",
+              color: "#b45309",
+              fontWeight: 700,
+            }}
+          >
+            ⚠️ O teu turno expirou. Podes entrar novamente na fila.
+          </div>
+        )}
 
 
 
-const listenPort = process.env.PORT || 3001;
-app.listen(listenPort, () => {
-  console.log(`API running on http://localhost:${listenPort}`);
-});
 
-console.log("SERVICE ROLE KEY EXISTS:", !!SUPABASE_SERVICE_ROLE_KEY);
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+            gap: 18,
+            marginTop: 22,
+          }}
+        >
+
+          {showStopConfirmModal && (
+            <div
+              onClick={() => setShowStopConfirmModal(false)}
+              style={{
+                position: "fixed",
+                inset: 0,
+                background: "rgba(15, 23, 42, 0.45)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: 20,
+                zIndex: 9999,
+                backdropFilter: "blur(2px)",
+              }}
+            >
+              <div
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  width: "100%",
+                  maxWidth: 560,
+                  background: "#ffffff",
+                  borderRadius: 22,
+                  padding: 28,
+                  boxShadow: "0 30px 80px rgba(15, 23, 42, 0.22)",
+                  border: "1px solid #eef2f7",
+                }}
+              >
+                <div
+                  style={{
+                    width: 62,
+                    height: 62,
+                    borderRadius: "50%",
+                    background: "#fff4e5",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: "1.9rem",
+                    marginBottom: 18,
+                  }}
+                >
+                  ⚠️
+                </div>
+
+                <h3
+                  style={{
+                    margin: 0,
+                    marginBottom: 10,
+                    color: "#1e4a8d",
+                    fontSize: "1.45rem",
+                    fontWeight: 800,
+                  }}
+                >
+                  Concluir sessão
+                </h3>
+
+                <p
+                  style={{
+                    margin: 0,
+                    color: "#5f6b7a",
+                    lineHeight: 1.7,
+                    fontSize: "1rem",
+                  }}
+                >
+                  Pretende mesmo concluir esta sessão?
+                  <br />
+                  Confirme que já inseriu as fotografias associadas ao registo antes de continuar.
+                </p>
+
+                <div
+                  style={{
+                    marginTop: 24,
+                    padding: "14px 16px",
+                    borderRadius: 14,
+                    background: "#f8fbff",
+                    border: "1px solid #e3edf8",
+                    color: "#48607a",
+                    fontSize: "0.95rem",
+                    lineHeight: 1.6,
+                  }}
+                >
+                  A sessão só será concluída se existirem fotografias associadas.
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "flex-end",
+                    gap: 12,
+                    flexWrap: "wrap",
+                    marginTop: 26,
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="secondary-btn"
+                    onClick={() => setShowStopConfirmModal(false)}
+                  >
+                    Cancelar
+                  </button>
+
+                  <button
+                    type="button"
+                    className="primary-btn"
+                    onClick={confirmStopSession}
+                  >
+                    Confirmar conclusão
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showStartSessionModal && (
+            <div className="modal-overlay">
+              <div className="modal-content start-session-modal">
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
+                  <div>
+                    <h2 style={{ margin: 0, color: "#1e4a8d" }}>
+                      {startSessionMode === "resume"
+                        ? "Retomar sessão clínica"
+                        : "Iniciar sessão clínica"}
+                    </h2>
+                    <p style={{ color: "#5f6b7a", marginTop: 8 }}>
+                      {startSessionMode === "resume"
+                        ? "A sessão será retomada com os dados já registados."
+                        : "Insira os dados da sessão clínica para começar."}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="secondary-btn"
+                    onClick={() => {
+                      setShowStartSessionModal(false);
+                      if (startSessionMode === "resume") {
+                        setStartSessionMode("start");
+                      }
+                    }}
+                  >
+                    Fechar
+                  </button>
+                </div>
+
+                <div style={{ display: "grid", gap: 14, marginTop: 22 }}>
+                  <input
+                    value={draftBox}
+                    onChange={(e) => setDraftBox(e.target.value)}
+                    placeholder="Box"
+                    disabled={startSessionMode === "resume"}
+                  />
+
+                  <input
+                    value={draftWorkUnit}
+                    onChange={(e) => setDraftWorkUnit(e.target.value)}
+                    placeholder="Unidade de trabalho"
+                    disabled={startSessionMode === "resume"}
+                  />
+
+                  <input
+                    value={draftPatientCode}
+                    onChange={(e) => setDraftPatientCode(e.target.value)}
+                    placeholder="Código do paciente"
+                    disabled={startSessionMode === "resume"}
+                  />
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "flex-end",
+                    gap: 12,
+                    marginTop: 24,
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="secondary-btn"
+                    onClick={() => {
+                      setShowStartSessionModal(false);
+                      if (startSessionMode === "resume") {
+                        setStartSessionMode("start");
+                      }
+                    }}
+                  >
+                    Cancelar
+                  </button>
+
+                  <button
+                    type="button"
+                    className="primary-btn"
+                    onClick={async () => {
+                      if (startSessionMode === "resume" && pendingResumeRecord) {
+                        await resumeSession(pendingResumeRecord);
+                        return;
+                      }
+
+                      await startSession();
+                      setShowStartSessionModal(false);
+                    }}
+                  >
+                    {startSessionMode === "resume"
+                      ? "Retomar sessão clínica"
+                      : "Iniciar sessão clínica"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+
+        {msg.text && (
+          <p
+            style={{
+              fontWeight: 600,
+              marginTop: "10px",
+              color:
+                msg.type === "warning"
+                  ? "#dc2626"
+                  : msg.type === "success"
+                    ? "#16a34a"
+                    : "#2563eb"
+            }}
+          >
+            {msg.type === "warning" && "⚠️ "}
+            {msg.type === "success" && "✅ "}
+            {msg.type === "info" && "ℹ️ "}
+            {msg.text}
+          </p>
+        )}
+      </section>
+
+      <section
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1.35fr 1fr",
+          gap: 24,
+          marginBottom: 28,
+        }}
+      >
+        <div
+          className="card"
+          style={{
+            padding: 26,
+            background: "linear-gradient(180deg, #ffffff 0%, #fbfcff 100%)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              gap: 16,
+              marginBottom: 18,
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <h2 style={{ margin: 0 }}>Estado da câmara 📷</h2>
+
+              {loading && (
+                <span
+                  style={{
+                    width: 18,
+                    height: 18,
+                    border: "3px solid #dbeafe",
+                    borderTop: "3px solid #1e4a8d",
+                    borderRadius: "50%",
+                    display: "inline-block",
+                    animation: "spin 0.8s linear infinite",
+                  }}
+                />
+              )}
+            </div>
+
+            <div
+              style={{
+                background: statusMeta.bg,
+                color: statusMeta.color,
+                borderRadius: 999,
+                padding: "10px 18px",
+                fontWeight: 800,
+                fontSize: "0.95rem",
+              }}
+            >
+              {statusMeta.label}
+            </div>
+          </div>
+
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              gap: 16,
+            }}
+          >
+            <div style={{ padding: 18, borderRadius: 18, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
+              <div style={{ color: "#7f8b99", marginBottom: 8 }}>Utilizador atual</div>
+              <div style={{ fontWeight: 700, color: "#17324d" }}>
+                <p>
+                  {cameraState?.status === "available"
+                    ? "—"
+                    : profilesMap[cameraState?.current_user_id] ||
+                    currentSession?.user_name ||
+                    "—"}
+                </p>
+              </div>
+            </div>
+
+            <div style={{ padding: 18, borderRadius: 18, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
+              <div style={{ color: "#7f8b99", marginBottom: 8 }}>Box atual</div>
+              <div style={{ fontWeight: 700, color: "#17324d" }}>
+                <p>{cameraState?.status === "in_use" ? cameraState?.current_box || "—" : "—"}</p>
+              </div>
+            </div>
+
+            <div style={{ padding: 18, borderRadius: 18, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
+              <div style={{ color: "#7f8b99", marginBottom: 8 }}>Unidade de trabalho</div>
+              <div style={{ fontWeight: 700, color: "#17324d" }}>
+                {cameraState?.status === "available"
+                  ? "—"
+                  : currentSession?.work_unit || workUnit || "—"}
+              </div>
+            </div>
+
+            <div style={{ padding: 18, borderRadius: 18, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
+              <div style={{ color: "#7f8b99", marginBottom: 8 }}>Sessão atual</div>
+              <div style={{ fontWeight: 700, color: "#17324d", wordBreak: "break-word" }}>
+                <p>{cameraState?.status === "in_use" ? currentSession?.id || "—" : "—"}</p>
+              </div>
+            </div>
+
+            <div style={{ padding: 18, borderRadius: 18, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
+              <div style={{ color: "#7f8b99", marginBottom: 8 }}>Código do paciente</div>
+              <div style={{ fontWeight: 700, color: "#17324d" }}>
+                <p>{cameraState?.status === "in_use" ? currentSession?.patient_code || "—" : "—"}</p>
+              </div>
+            </div>
+          </div>
+
+        </div>
+        <div
+          style={{
+            marginTop: 18,
+            padding: 18,
+            border: "1px solid #dbe5f0",
+            borderRadius: 18,
+            background: "#f8fbff",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 12,
+              flexWrap: "wrap",
+              marginBottom: 14,
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  fontWeight: 800,
+                  color: "#1e4a8d",
+                  fontSize: "1rem",
+                  marginBottom: 4,
+                }}
+              >
+                Fase da captura
+              </div>
+              <div style={{ color: "#6b7280", fontSize: "0.95rem" }}>
+                Define em que etapa as próximas fotografias devem ser associadas.
+              </div>
+            </div>
+
+            <div
+              style={{
+                padding: "8px 14px",
+                borderRadius: 999,
+                background: "#e9f2fd",
+                color: "#1e4a8d",
+                fontWeight: 700,
+              }}
+            >
+              Atual: {formatPhaseLabel(currentPhase)}
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button
+              className={currentPhase === "before" ? "primary-btn" : "secondary-btn"}
+              onClick={() => updatePhase("before")}
+              type="button"
+            >
+              Inicial
+            </button>
+
+            <button
+              className={currentPhase === "during" ? "primary-btn" : "secondary-btn"}
+              onClick={() => updatePhase("during")}
+              type="button"
+            >
+              Durante
+            </button>
+
+            <button
+              className={currentPhase === "after" ? "primary-btn" : "secondary-btn"}
+              onClick={() => updatePhase("after")}
+              type="button"
+            >
+              Final
+            </button>
+          </div>
+        </div>
+
+
+        {false && canSeeSessionClinic && (
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 24,
+              padding: 26,
+              border: "1px solid #e4e9f0",
+            }}
+          >
+            <h2 style={{ marginTop: 0, color: "#1e4a8d", fontSize: "1.7rem" }}>
+              Sessão clínica
+            </h2>
+
+            <p style={{ color: "#5f6b7a", marginTop: 8 }}>
+              Preparação da sessão ativa e carregamento de fotografias.
+            </p>
+
+            <div style={{ display: "grid", gap: 16, marginTop: 22 }}>
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: 8,
+                    color: "#5f6b7a",
+                    fontWeight: 600,
+                  }}
+                >
+                  Box
+                </label>
+                <input
+                  value={currentSession && !isEditingSessionData ? box : currentSession && isEditingSessionData ? box : draftBox}
+                  onChange={(e) => {
+                    if (currentSession) {
+                      setBox(e.target.value);
+                    } else {
+                      setDraftBox(e.target.value);
+                    }
+                  }}
+                  placeholder="Introduza a Box"
+                  disabled={!!currentSession && !isEditingSessionData}
+                />
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: 8,
+                    color: "#5f6b7a",
+                    fontWeight: 600,
+                  }}
+                >
+                  Unidade de trabalho
+                </label>
+
+                <input
+                  value={currentSession ? workUnit : draftWorkUnit}
+                  onChange={(e) => {
+                    if (currentSession) {
+                      setWorkUnit(e.target.value);
+                    } else {
+                      setDraftWorkUnit(e.target.value);
+                    }
+                  }}
+                  placeholder="Ex: Nº da cadeira"
+                  disabled={currentSession && !isEditingSessionData}
+                />
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: 8,
+                    color: "#5f6b7a",
+                    fontWeight: 600,
+                  }}
+                >
+                  Código do paciente
+                </label>
+                <input
+                  autoFocus={!currentSession}
+                  value={
+                    currentSession && !isEditingSessionData
+                      ? patientCode
+                      : currentSession && isEditingSessionData
+                        ? patientCode
+                        : draftPatientCode
+                  }
+                  onChange={(e) => {
+                    if (currentSession) {
+                      setPatientCode(e.target.value);
+                    } else {
+                      setDraftPatientCode(e.target.value);
+                    }
+                  }}
+                  placeholder="Introduza o código"
+                  disabled={!!currentSession && !isEditingSessionData}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && canStartSessionFinal) {
+                      startSession();
+                    }
+                  }}
+                />
+              </div>
+            </div>
+
+            {canEditSessionData && (
+              <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
+                {!isEditingSessionData ? (
+                  <button type="button" onClick={() => setIsEditingSessionData(true)}>
+                    Editar
+                  </button>
+                ) : (
+                  <>
+                    <button type="button" onClick={saveSessionData}>
+                      Guardar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsEditingSessionData(false);
+                        setBox(currentSession?.box || "");
+                        setWorkUnit(currentSession?.work_unit || "");
+                        setPatientCode(currentSession?.patient_code || "");
+                      }}
+                    >
+                      Cancelar
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+
+            <div style={{ marginTop: 26 }}>
+              <label
+                style={{
+                  display: "block",
+                  marginBottom: 8,
+                  color: "#5f6b7a",
+                  fontWeight: 600,
+                }}
+              >
+                Carregar fotografias
+              </label>
+
+              <select
+                value={photoPhase}
+                onChange={(e) => setPhotoPhase(e.target.value)}
+                disabled={!currentSession || uploadingPhoto}
+                style={{ marginBottom: 12 }}
+              >
+                <option value="before">Inicial</option>
+                <option value="during">Durante</option>
+                <option value="after">Final</option>
+              </select>
+
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                disabled={!currentSession || uploadingPhoto}
+                style={{ marginBottom: 12 }}
+              />
+
+              <button
+                type="button"
+                disabled={!currentSession || !selectedFile || uploadingPhoto}
+                onClick={uploadPhoto}
+              >
+                {uploadingPhoto ? "A carregar..." : "Carregar fotografia"}
+              </button>
+            </div>
+          </div>
+        )}
+
+      </section>
+
+
+
+      <section
+        className="card"
+        style={{
+          padding: 26,
+          marginBottom: 28,
+          background: "linear-gradient(180deg, #ffffff 0%, #fbfcff 100%)",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 16,
+            flexWrap: "wrap",
+            marginBottom: 18,
+          }}
+        >
+          <div>
+            <h2 style={{ margin: 0, color: "#1e4a8d", fontSize: "1.7rem" }}>
+              Fila ativa
+            </h2>
+            <p style={{ color: "#5f6b7a", margin: "8px 0 0 0" }}>
+              Utilizadores atualmente em espera ou notificados.
+            </p>
+          </div>
+        </div>
+
+
+        {loading ? (
+          <p>A carregar fila...</p>
+        ) : queueEntries.length === 0 ? (
+          <p>Não há utilizadores na fila.</p>
+        ) : (
+          <div className="table-wrapper">
+            <table className="styled-table">
+              <thead>
+                <tr>
+                  <th>Posição</th>
+                  <th>Nome</th>
+                  <th>Box</th>
+                  <th>Estado</th>
+                  <th>Entrou em</th>
+                  <th>Notificado em</th>
+                </tr>
+              </thead>
+              <tbody>
+                {queueEntries.map((entry, index) => (
+                  <tr key={entry.id}>
+                    <td>{index + 1}</td>
+                    <td>{profilesMap[entry.user_id] || entry.user_id}</td>
+                    <td>{entry.current_box || "—"}</td>
+                    <td>
+                      <span
+                        className="status-pill"
+                        style={{
+                          background:
+                            entry.status === "notified" ? "#fdf2dc" : "#e8f2fd",
+                          color:
+                            entry.status === "notified" ? "#c7952d" : "#1e4a8d",
+                        }}
+                      >
+                        {entry.status}
+                      </span>
+                    </td>
+                    <td>
+                      {entry.joined_at
+                        ? new Date(entry.joined_at).toLocaleString()
+                        : "—"}
+                    </td>
+                    <td>
+                      {entry.notified_at
+                        ? new Date(entry.notified_at).toLocaleString()
+                        : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section
+        className="card"
+        style={{
+          padding: 26,
+          marginBottom: 28,
+          background: "linear-gradient(180deg, #ffffff 0%, #fbfcff 100%)",
+        }}
+      >
+        <div
+
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 16,
+              flexWrap: "wrap",
+              marginBottom: 18,
+            }}
+          >
+            <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={() => setRecordsFilterMode("active")}
+                style={{
+                  opacity: recordsFilterMode === "active" ? 1 : 0.7,
+                }}
+              >
+                Ativos
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setRecordsFilterMode("archived")}
+                style={{
+                  opacity: recordsFilterMode === "archived" ? 1 : 0.7,
+                }}
+              >
+                Arquivados
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setRecordsFilterMode("all")}
+                style={{
+                  opacity: recordsFilterMode === "all" ? 1 : 0.7,
+                }}
+              >
+                Todos
+              </button>
+            </div>
+
+            <div>
+              <h2 style={{ margin: 0, color: "#1e4a8d", fontSize: "1.7rem" }}>
+                {isTeacher
+                  ? "Registos"
+                  : recordsView === "all"
+                    ? "Todos os registos"
+                    : "Meus registos"}
+              </h2>
+              <p style={{ color: "#5f6b7a", margin: "8px 0 0" }}>
+                {isTeacher && recordsView === "assigned"
+                  ? "Consulta dos registos clínicos aos quais tens acesso."
+                  : recordsView === "all"
+                    ? "Consulta global dos registos do módulo."
+                    : "Consulta das tuas sessões clínicas e respetivas fotografias."}
+              </p>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button
+                className={recordsView === "mine" ? "primary-btn" : "soft-btn"}
+                onClick={() => setRecordsView("mine")}
+              >
+                Meus registos
+              </button>
+
+              {isTeacher && (
+                <button
+                  className={recordsView === "assigned" ? "primary-btn" : "soft-btn"}
+                  onClick={() => setRecordsView("assigned")}
+                >
+                  Registos atribuídos
+                </button>
+              )}
+
+              {canViewAllRecords && (
+                <button
+                  className={recordsView === "all" ? "primary-btn" : "soft-btn"}
+                  onClick={() => setRecordsView("all")}
+                >
+                  Todos os registos
+                </button>
+              )}
+            </div>
+          </div>
+
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(5, minmax(140px, 1fr))",
+              gap: 12,
+              width: "100%",
+            }}
+          >
+            <input
+              type="date"
+              value={filterDate}
+              onChange={(e) => setFilterDate(e.target.value)}
+            />
+            <input
+              type="text"
+              placeholder="Nome"
+              value={filterName}
+              onChange={(e) => setFilterName(e.target.value)}
+            />
+            <input
+              type="text"
+              placeholder="Cod paciente"
+              value={filterPatientCode}
+              onChange={(e) => setFilterPatientCode(e.target.value)}
+            />
+            <input
+              type="text"
+              placeholder="Box"
+              value={filterBox}
+              onChange={(e) => setFilterBox(e.target.value)}
+            />
+            <input
+              type="text"
+              placeholder="Estado"
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {filteredRecords.length === 0 ? (
+          <p style={{ color: "#5f6b7a" }}>Ainda não existem registos para mostrar.</p>
+        ) : (
+          <div className="table-wrapper">
+            <table className="styled-table">
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Nome</th>
+                  <th>Cod paciente</th>
+                  <th>Box</th>
+                  <th>Estado</th>
+                  <th>Nº fotos</th>
+                  <th>Consultar</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredRecords.map((record) => (
+                  <tr key={record.id}>
+                    <td>
+                      {record.started_at
+                        ? new Date(record.started_at).toLocaleString()
+                        : "—"}
+                    </td>
+                    <td>{record.user_name || "—"}</td>
+                    <td>{record.patient_code || "—"}</td>
+                    <td>{record.box || "—"}</td>
+                    <td>{formatSessionStatus(record.status)}</td>
+                    <td>{record.photos_count}</td>
+                    <td>
+                      <button
+                        className="secondary-btn"
+                        onClick={() => openRecordModal(record)}
+                      >
+                        🔍
+                      </button>
+                    </td>
+                    <td>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        {record.is_archived && (
+                          <div style={{ color: "#b45309", fontWeight: 600 }}>
+                            Arquivado
+                            {record.archived_at
+                              ? ` em ${new Date(record.archived_at).toLocaleString()}`
+                              : ""}
+                            {record.archived_by_name ||
+                              profilesMap[record.archived_by_user_id] ||
+                              record.archived_by_user_id}
+                          </div>
+                        )}
+
+                        {!record.is_archived && !(isTeacher && recordsView === "assigned") && (
+                          <button
+                            type="button"
+                            disabled={recordActionLoadingId === record.id}
+                            onClick={() =>
+                              openConfirmModal({
+                                title: "Arquivar registo",
+                                message:
+                                  "Este registo deixará de aparecer na lista de ativos, mas poderá ser restaurado por um administrador.",
+                                confirmText: "Arquivar",
+                                type: "warning",
+                                action: () => archiveRecord(record.id),
+                              })
+                            }
+                          >
+                            {recordActionLoadingId === record.id ? "A arquivar..." : "Arquivar"}
+                          </button>
+                        )}
+
+                        {record.is_archived && canViewAllRecords && (
+                          <>
+                            <button
+                              type="button"
+                              disabled={recordActionLoadingId === record.id}
+                              onClick={() =>
+                                openConfirmModal({
+                                  title: "Restaurar registo",
+                                  message: "Este registo voltará a aparecer na lista de ativos.",
+                                  confirmText: "Restaurar",
+                                  type: "success",
+                                  action: () => restoreRecord(record.id),
+                                })
+                              }
+                            >
+                              {recordActionLoadingId === record.id ? "A restaurar..." : "Restaurar"}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={recordActionLoadingId === record.id}
+                              onClick={() =>
+                                openConfirmModal({
+                                  title: "Eliminar definitivamente",
+                                  message:
+                                    "Esta ação é irreversível. O registo será eliminado permanentemente.",
+                                  confirmText: "Eliminar definitivo",
+                                  type: "danger",
+                                  action: () => deleteRecordPermanently(record.id),
+                                })
+                              }
+                            >
+                              {recordActionLoadingId === record.id
+                                ? "A eliminar..."
+                                : "Eliminar definitivo"}
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {isRecordModalOpen && selectedRecord && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 24,
+            zIndex: 1000,
+          }}
+          onClick={closeRecordModal}
+        >
+          <div
+            className="card"
+            style={{
+              width: "min(1080px, 100%)",
+              maxHeight: "90vh",
+              overflowY: "auto",
+              padding: 28,
+              background: "#ffffff",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 16,
+                marginBottom: 22,
+              }}
+            >
+              <div>
+                <h2 style={{ margin: 0, color: "#1e4a8d" }}>Detalhes do registo</h2>
+                <p style={{ margin: "8px 0 0 0", color: "#5f6b7a" }}>
+                  Consulta do histórico fotográfico e informação da sessão.
+                </p>
+
+                {selectedRecord?.status === "paused" &&
+                  selectedRecord?.user_id === currentUserId && (
+                    <div style={{ marginBottom: 24, display: "flex", gap: 12, flexWrap: "wrap" }}>
+                      {isMyTurn ? (
+                        <button
+                          className="primary-btn"
+                          onClick={() => resumeSession(selectedRecord)}
+                        >
+                          Retomar sessão
+                        </button>
+                      ) : (
+                        <button
+                          className="secondary-btn"
+                          onClick={async () => {
+                            console.log(selectedRecord);
+                            setPendingResumeRecord(selectedRecord);
+
+                            setDraftBox(selectedRecord?.box || "");
+                            setDraftWorkUnit(selectedRecord?.work_unit || selectedRecord?.workUnit || "");
+                            setDraftPatientCode(
+                              selectedRecord?.patient_code ||
+                              selectedRecord?.patientCode ||
+                              ""
+                            );
+
+                            setStartSessionMode("resume");
+
+                            await joinQueue();
+                            closeRecordModal();
+                          }}
+                        >
+                          Entrar na fila para retomar
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+              </div>
+
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                {canEditSelectedRecord && !isEditingRecordData && (
+                  <button
+                    type="button"
+                    className="secondary-btn"
+                    onClick={startRecordEdit}
+                    title="Editar dados do registo"
+                    style={{
+                      width: 48,
+                      height: 48,
+                      padding: 0,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 20,
+                    }}
+                  >
+                    ✏️
+                  </button>
+                )}
+
+                <button className="secondary-btn" onClick={closeRecordModal}>
+                  Fechar
+                </button>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                gap: 16,
+                marginBottom: 24,
+              }}
+            >
+              <div style={{ padding: 16, borderRadius: 16, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
+                <strong>Data:</strong><br />
+                {selectedRecord.started_at
+                  ? new Date(selectedRecord.started_at).toLocaleString()
+                  : "—"}
+              </div>
+
+              <div style={{ padding: 16, borderRadius: 16, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
+                <strong>Nome:</strong><br />
+                {selectedRecord.user_name || "—"}
+              </div>
+
+              <div style={{ padding: 16, borderRadius: 16, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
+                <strong>Código do Paciente:</strong><br />
+                {isEditingRecordData ? (
+                  <input
+                    value={recordEditForm.patientCode}
+                    onChange={(e) =>
+                      setRecordEditForm((prev) => ({
+                        ...prev,
+                        patientCode: e.target.value,
+                      }))
+                    }
+                    placeholder="Código do paciente"
+                    style={{ marginTop: 8 }}
+                  />
+                ) : (
+                  selectedRecord.patient_code || "—"
+                )}
+              </div>
+
+              <div style={{ padding: 16, borderRadius: 16, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
+                <strong>Box:</strong><br />
+                {isEditingRecordData ? (
+                  <input
+                    value={recordEditForm.box}
+                    onChange={(e) =>
+                      setRecordEditForm((prev) => ({
+                        ...prev,
+                        box: e.target.value,
+                      }))
+                    }
+                    placeholder="Box"
+                    style={{ marginTop: 8 }}
+                  />
+                ) : (
+                  selectedRecord.box || "—"
+                )}
+              </div>
+
+              <div style={{ padding: 16, borderRadius: 16, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
+                <strong>Unidade de trabalho:</strong><br />
+                {isEditingRecordData ? (
+                  <input
+                    value={recordEditForm.workUnit}
+                    onChange={(e) =>
+                      setRecordEditForm((prev) => ({
+                        ...prev,
+                        workUnit: e.target.value,
+                      }))
+                    }
+                    placeholder="Unidade de trabalho"
+                    style={{ marginTop: 8 }}
+                  />
+                ) : (
+                  selectedRecord.work_unit || "—"
+                )}
+              </div>
+
+              <div style={{ padding: 16, borderRadius: 16, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
+                <strong>Estado:</strong><br />
+                {formatSessionStatus(selectedRecord.status)}
+              </div>
+
+              <div style={{ padding: 16, borderRadius: 16, background: "#f8fafc", border: "1px solid #e4e9f0" }}>
+                <strong>ID da sessão:</strong><br />
+                {selectedRecord.id}
+              </div>
+            </div>
+
+            {isEditingRecordData && (
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: 12,
+                  marginTop: -8,
+                  marginBottom: 24,
+                  flexWrap: "wrap",
+                }}
+              >
+                <button
+                  type="button"
+                  className="secondary-btn"
+                  onClick={cancelRecordEdit}
+                  disabled={savingRecordData}
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="button"
+                  className="primary-btn"
+                  onClick={saveRecordData}
+                  disabled={savingRecordData}
+                >
+                  {savingRecordData ? "A guardar..." : "Guardar alterações"}
+                </button>
+              </div>
+            )}
+            <div style={{ marginTop: 24 }}>
+              <h3 style={{ color: "#1e4a8d", marginBottom: 12 }}>
+                Professores com acesso
+              </h3>
+
+              <div style={{ marginBottom: 14 }}>
+                {sessionTeachers.length === 0 ? (
+                  <p style={{ color: "#5f6b7a", margin: 0 }}>
+                    Nenhum professor associado a este registo.
+                  </p>
+                ) : (
+                  sessionTeachers.map((item) => (
+                    <div
+                      key={item.id}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 8,
+                        padding: "8px 12px",
+                        borderRadius: 10,
+                        background: "#f1f5f9",
+                        color: "#17324d",
+                        fontWeight: 600,
+                        marginRight: 8,
+                        marginBottom: 8,
+                      }}
+                    >
+                      <span>{item.teacher?.full_name || item.teacher_user_id}</span>
+
+                      <button
+                        type="button"
+                        disabled={loadingTeachers}
+                        onClick={() => removeTeacherFromSession(item.id)}
+                        style={{
+                          border: "none",
+                          background: "transparent",
+                          color: "#b91c1c",
+                          fontWeight: 800,
+                          cursor: "pointer",
+                          fontSize: 14,
+                        }}
+                        title="Remover professor"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
+                <select
+                  value={selectedTeacherId}
+                  onChange={(e) => setSelectedTeacherId(e.target.value)}
+                  style={{
+                    flex: 1,
+                    padding: "10px 12px",
+                    borderRadius: 10,
+                    border: "1px solid #dbe3ec",
+                    background: "#fff",
+                    fontSize: 14,
+                  }}
+                >
+                  <option value="">Selecionar professor</option>
+                  {teachers.map((teacher) => (
+                    <option key={teacher.id} value={teacher.id}>
+                      {teacher.full_name}
+                    </option>
+                  ))}
+                </select>
+
+                <button
+                  type="button"
+                  disabled={!selectedTeacherId || loadingTeachers}
+                  onClick={assignTeacherToSession}
+                  style={{
+                    padding: "10px 16px",
+                    borderRadius: 10,
+                    border: "none",
+                    background: "#1e4a8d",
+                    color: "#fff",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    opacity: !selectedTeacherId || loadingTeachers ? 0.6 : 1,
+                  }}
+                >
+                  {loadingTeachers ? "A associar..." : "Associar"}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <h3 style={{ color: "#1e4a8d", marginBottom: 16 }}>
+                Fotografias associadas
+              </h3>
+
+              {selectedRecordPhotos.length === 0 ? (
+                <p style={{ color: "#5f6b7a" }}>
+                  Este registo ainda não tem fotografias associadas.
+                </p>
+              ) : (
+                <div style={{ display: "grid", gap: 28 }}>
+                  {[
+                    { key: "before", label: "Inicial" },
+                    { key: "during", label: "Durante" },
+                    { key: "after", label: "Final" },
+                  ].map((section) => {
+                    const phasePhotos = groupedSelectedRecordPhotos[section.key];
+
+                    return (
+                      <div key={section.key}>
+                        <h4
+                          style={{
+                            color: "#1e4a8d",
+                            marginBottom: 12,
+                          }}
+                        >
+                          {section.label}
+                        </h4>
+
+                        {phasePhotos.length === 0 ? (
+                          <p style={{ color: "#5f6b7a" }}>
+                            Sem fotografias nesta categoria.
+                          </p>
+                        ) : (
+                          <div
+                            style={{
+                              display: "grid",
+                              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                              gap: 16,
+                            }}
+                          >
+                            {phasePhotos.map((photo) => (
+                              <div
+                                key={photo.id}
+                                style={{
+                                  border: "1px solid #e4e9f0",
+                                  borderRadius: 18,
+                                  padding: 12,
+                                  background: "#f8fafc",
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    width: "100%",
+                                    aspectRatio: "4 / 3",
+                                    borderRadius: 14,
+                                    overflow: "hidden",
+                                    background: "#eef3f8",
+                                    marginBottom: 10,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                  }}
+                                >
+                                  {photoPreviewMap[photo.id] ? (
+                                    <img
+                                      src={photoPreviewMap[photo.id]}
+                                      alt={section.label}
+                                      style={{
+                                        width: "100%",
+                                        height: "100%",
+                                        objectFit: "cover",
+                                        cursor: "pointer",
+                                      }}
+                                      onClick={() => openPhoto(photo.storage_path)}
+                                    />
+                                  ) : (
+                                    <span style={{ color: "#7f8b99", fontSize: "0.9rem" }}>
+                                      Sem preview
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div
+                                  style={{
+                                    color: "#5f6b7a",
+                                    fontSize: "0.92rem",
+                                    marginBottom: 10,
+                                  }}
+                                >
+                                  {new Date(photo.captured_at).toLocaleString()}
+                                </div>
+
+                                <button
+                                  className="secondary-btn"
+                                  onClick={() => openPhoto(photo.storage_path)}
+                                  style={{ width: "100%" }}
+                                >
+                                  Abrir fotografia
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+
+
+      {showTurnModal && isMyTurn && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 24,
+            zIndex: 1200,
+          }}
+          onClick={() => setShowTurnModal(false)}
+        >
+          <div
+            className="card"
+            style={{
+              width: "min(560px, 100%)",
+              padding: 30,
+              background: "#ffffff",
+              textAlign: "center",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              className="badge badge-blue"
+              style={{ width: "fit-content", margin: "0 auto 18px auto" }}
+            >
+              Notificação
+            </div>
+
+            <h2 style={{ marginTop: 0, color: "#1e4a8d", fontSize: "2rem" }}>
+              É a tua vez
+            </h2>
+
+            <p style={{ color: "#5f6b7a", fontSize: "1.05rem", marginBottom: 20 }}>
+              A câmara está reservada para ti. Podes iniciar a sessão agora.
+            </p>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                gap: 14,
+                marginBottom: 22,
+                textAlign: "left",
+              }}
+            >
+              <div
+                style={{
+                  padding: 14,
+                  borderRadius: 14,
+                  background: "#f8fafc",
+                  border: "1px solid #e4e9f0",
+                }}
+              >
+                <strong>Box</strong>
+                <br />
+                {box || cameraState?.current_box || "—"}
+              </div>
+
+              <div
+                style={{
+                  padding: 14,
+                  borderRadius: 14,
+                  background: "#f8fafc",
+                  border: "1px solid #e4e9f0",
+                }}
+              >
+                <strong>Tempo limite</strong>
+                <br />
+                {myNotifiedEntry?.expires_at
+                  ? new Date(myNotifiedEntry.expires_at).toLocaleTimeString()
+                  : "—"}
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "center",
+                gap: 12,
+                flexWrap: "wrap",
+              }}
+            >
+              <button
+                className="primary-btn"
+                onClick={async () => {
+                  if (pendingResumeRecord) {
+                    await resumeSession(pendingResumeRecord);
+                    return;
+                  }
+
+                  setShowStartSessionModal(true);
+                  setShowTurnModal(false);
+                }}
+              >
+                {pendingResumeRecord ? "Retomar sessão" : "Iniciar sessão"}
+              </button>
+
+              <button
+                className="secondary-btn"
+                onClick={() => setShowTurnModal(false)}
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmModal.open && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.55)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+            padding: 20,
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 24,
+              padding: 28,
+              width: "100%",
+              maxWidth: 460,
+              boxShadow: "0 24px 80px rgba(15, 23, 42, 0.25)",
+            }}
+          >
+            <div
+              style={{
+                width: 54,
+                height: 54,
+                borderRadius: "50%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                marginBottom: 18,
+                background:
+                  confirmModal.type === "danger"
+                    ? "#fee2e2"
+                    : confirmModal.type === "success"
+                      ? "#dcfce7"
+                      : "#fef3c7",
+                color:
+                  confirmModal.type === "danger"
+                    ? "#b91c1c"
+                    : confirmModal.type === "success"
+                      ? "#15803d"
+                      : "#b45309",
+                fontSize: 24,
+                fontWeight: 800,
+              }}
+            >
+              {confirmModal.type === "danger"
+                ? "!"
+                : confirmModal.type === "success"
+                  ? "✓"
+                  : "?"}
+            </div>
+
+            <h3 style={{ margin: 0, color: "#17324d", fontSize: "1.4rem" }}>
+              {confirmModal.title}
+            </h3>
+
+            <p style={{ color: "#5f6b7a", marginTop: 12, lineHeight: 1.6 }}>
+              {confirmModal.message}
+            </p>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: 12,
+                marginTop: 24,
+              }}
+            >
+              <button type="button" onClick={closeConfirmModal}>
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  if (confirmModal.action) {
+                    await confirmModal.action();
+                  }
+                  closeConfirmModal();
+                }}
+                style={{
+                  background:
+                    confirmModal.type === "danger" ? "#b91c1c" : "#1e4a8d",
+                  color: "#fff",
+                }}
+              >
+                {confirmModal.confirmText}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+
+
+  );
+}
