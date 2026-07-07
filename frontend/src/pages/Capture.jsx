@@ -5,8 +5,6 @@ import axios from "axios";
 
 
 //const API_URL = "https://em-capture-backend.onrender.com/api/photos/ingest";
-const ACTIVE_SESSION_URL = "https://em-capture-backend.onrender.com/api/camera/active-session";
-
 //const API_URL = import.meta.env.VITE_API_URL;
 const CAMERA_ID = import.meta.env.VITE_DEFAULT_CAMERA_ID;
 
@@ -36,11 +34,6 @@ export default function Capture({ session }) {
   const [loadingTeachers, setLoadingTeachers] = useState(false);
   const [loadingId, setLoadingId] = useState(null);
   const [assignedTeacherRecords, setAssignedTeacherRecords] = useState([]);
-  const teacherRecords = assignedTeacherRecords;
-  const setTeacherRecords = setAssignedTeacherRecords;
-
-  //const [assignedTeacherRecords, setAssignedTeacherRecords] = useState([]);
-
   const [currentPhase, setCurrentPhase] = useState("during");
   const [confirmModal, setConfirmModal] = useState({
     open: false,
@@ -3438,9 +3431,3 @@ export default function Capture({ session }) {
 
   );
 }
-// fix deploy assignedTeacherRecords
-
-// force fresh vercel deployment
-
-console.log('DEPLOY NOVO D47 - EM CAPTURE');
-
