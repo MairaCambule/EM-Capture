@@ -3436,3 +3436,4 @@ export default function Capture({ session }) {
 
   );
 }
+// fix deploy teacherRecords
