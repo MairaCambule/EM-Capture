@@ -36,6 +36,8 @@ export default function Capture({ session }) {
   const [loadingTeachers, setLoadingTeachers] = useState(false);
   const [loadingId, setLoadingId] = useState(null);
   const [assignedTeacherRecords, setAssignedTeacherRecords] = useState([]);
+  const teacherRecords = assignedTeacherRecords;
+  const setTeacherRecords = setAssignedTeacherRecords;
 
   //const [assignedTeacherRecords, setAssignedTeacherRecords] = useState([]);
 
