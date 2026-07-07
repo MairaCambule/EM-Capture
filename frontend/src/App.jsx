@@ -1,74 +1,20 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { supabase } from "./supabaseClient";
-import axios from "axios";
 
+import Login from "./pages/Login";
+import Dashboard from "./pages/Dashboard";
+import Capture from "./pages/Capture";
+import Profile from "./pages/Profile";
+import AdminUsers from "./pages/AdminUsers";
 
-//const API_URL = "https://em-capture-backend.onrender.com/api/photos/ingest";
-const ACTIVE_SESSION_URL = "https://em-capture-backend.onrender.com/api/camera/active-session";
+function PrivateRoute({ session, children }) {
+  if (!session) return <Navigate to="/login" replace />;
+  return children;
+}
 
-//const API_URL = import.meta.env.VITE_API_URL;
-const CAMERA_ID = import.meta.env.VITE_DEFAULT_CAMERA_ID;
-
-const PHOTO_BUCKET = "clinical-photos";
-
-export default function Capture({ session }) {
-  const navigate = useNavigate();
-
-  const [showTurnModal, setShowTurnModal] = useState(false);
-  const [msg, setMsg] = useState({ text: "", type: "" });
-  useEffect(() => {
-    if (!msg.text) return;
-
-    const timeout =
-      msg.type === "warning" ? 30000 : 4000;
-
-    const timer = setTimeout(() => {
-      setMsg({ text: "", type: "" });
-    }, timeout);
-
-    return () => clearTimeout(timer);
-  }, [msg]);
-
-  const [teachers, setTeachers] = useState([]);
-  const [selectedTeacherId, setSelectedTeacherId] = useState("");
-  const [sessionTeachers, setSessionTeachers] = useState([]);
-  const [loadingTeachers, setLoadingTeachers] = useState(false);
-  const [loadingId, setLoadingId] = useState(null);
-  const [teacherRecords, setTeacherRecords] = useState([]);
-
-  //const [teacherRecords, setTeacherRecords] = useState([]);
-
-  const [currentPhase, setCurrentPhase] = useState("during");
-  const [confirmModal, setConfirmModal] = useState({
-    open: false,
-    title: "",
-    message: "",
-    confirmText: "",
-    action: null,
-    type: "default",
-  });
-
-  const [showStartSessionModal, setShowStartSessionModal] = useState(false);
-
-  const [startSessionMode, setStartSessionMode] = useState("start");
-
-  const [showStopConfirmModal, setShowStopConfirmModal] = useState(false);
-
-  const [isEditingSessionData, setIsEditingSessionData] = useState(false);
-
-  const [recordActionLoadingId, setRecordActionLoadingId] = useState(null);
-
-  const API_BASE_URL = import.meta.env.VITE_API_URL;
-
-  //const BASE_URL = "https://em-capture-backend.onrender.com";
-
-  //const API_URL = `${BASE_URL}/api/photos/ingest`;
-
-
-  const [cameraState, setCameraState] = useState(null);
-  const [queueEntries, setQueueEntries] = useState([]);
-  const [profilesMap, setProfilesMap] = useState({});
+export default function App() {
+  const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
   const [box, setBox] = useState("");
   const [patientCode, setPatientCode] = useState("");
