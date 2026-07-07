@@ -35,9 +35,9 @@ export default function Capture({ session }) {
   const [sessionTeachers, setSessionTeachers] = useState([]);
   const [loadingTeachers, setLoadingTeachers] = useState(false);
   const [loadingId, setLoadingId] = useState(null);
-  const [teacherRecords, setTeacherRecords] = useState([]);
+  const [assignedTeacherRecords, setAssignedTeacherRecords] = useState([]);
 
-  //const [teacherRecords, setTeacherRecords] = useState([]);
+  //const [assignedTeacherRecords, setAssignedTeacherRecords] = useState([]);
 
   const [currentPhase, setCurrentPhase] = useState("during");
   const [confirmModal, setConfirmModal] = useState({
@@ -121,13 +121,13 @@ export default function Capture({ session }) {
 
   const baseRecords =
     isTeacher && recordsView === "assigned"
-      ? teacherRecords
+      ? assignedTeacherRecords
       : recordsView === "all" && canViewAllRecords
         ? allRecords
         : myRecords;
 
   console.log("BASE RECORDS:", baseRecords);
-  console.log("TEACHER RECORDS:", teacherRecords);
+  console.log("TEACHER RECORDS:", assignedTeacherRecords);
   console.log("VIEW:", recordsView);
 
   const filteredRecordsByArchive = baseRecords.filter((record) => {
@@ -180,7 +180,7 @@ export default function Capture({ session }) {
   });
 
   console.log("BASE RECORDS:", baseRecords);
-  console.log("TEACHER RECORDS:", teacherRecords);
+  console.log("TEACHER RECORDS:", assignedTeacherRecords);
   console.log("VIEW:", recordsView);
   console.log("FILTERED BY ARCHIVE:", filteredRecordsByArchive);
   console.log("FILTERED FINAL:", filteredRecords);
@@ -294,7 +294,7 @@ export default function Capture({ session }) {
       if (profileError) {
         console.error("Erro ao carregar profile:", profileError);
         setProfile(null);
-        setTeacherRecords([]);
+        setAssignedTeacherRecords([]);
       } else {
         setProfile(profileData);
 
@@ -328,13 +328,13 @@ export default function Capture({ session }) {
               name: r.name || r.full_name || "—",
             }));
 
-            setTeacherRecords(normalized);
+            setAssignedTeacherRecords(normalized);
           } catch (error) {
             console.error("Erro ao carregar registos do professor:", error);
-            setTeacherRecords([]);
+            setAssignedTeacherRecords([]);
           }
         } else {
-          setTeacherRecords([]);
+          setAssignedTeacherRecords([]);
         }
       }
 
@@ -1311,7 +1311,7 @@ export default function Capture({ session }) {
         )
       );
 
-      setTeacherRecords((records) =>
+      setAssignedTeacherRecords((records) =>
         records.map((record) =>
           record.id === updatedRecord.id ? { ...record, ...updatedRecord } : record
         )
@@ -3436,8 +3436,9 @@ export default function Capture({ session }) {
 
   );
 }
-// fix deploy teacherRecords
+// fix deploy assignedTeacherRecords
 
 // force fresh vercel deployment
 
 console.log('DEPLOY NOVO D47 - EM CAPTURE');
+
