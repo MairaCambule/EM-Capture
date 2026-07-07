@@ -3,6 +3,9 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 import multer from "multer";
+import admin from "firebase-admin";
+import jwt from "jsonwebtoken";
+import crypto from "crypto";
 
 dotenv.config();
 
@@ -20,6 +23,9 @@ const PHOTO_BUCKET = "clinical-photos";
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+const SUPABASE_JWT_SECRET = process.env.SUPABASE_JWT_SECRET;
+const FIREBASE_SERVICE_ACCOUNT_BASE64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
+const FIREBASE_SERVICE_ACCOUNT_JSON = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !SUPABASE_ANON_KEY) {
   throw new Error(
@@ -39,6 +45,174 @@ const supabaseAuth = createClient(
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 //const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+
+let firebaseReady = false;
+
+function initFirebaseAdminIfNeeded() {
+  if (firebaseReady) return;
+
+  if (admin.apps.length > 0) {
+    firebaseReady = true;
+    return;
+  }
+
+  let serviceAccount = null;
+
+  if (FIREBASE_SERVICE_ACCOUNT_BASE64) {
+    const decoded = Buffer.from(FIREBASE_SERVICE_ACCOUNT_BASE64, "base64").toString("utf8");
+    serviceAccount = JSON.parse(decoded);
+  } else if (FIREBASE_SERVICE_ACCOUNT_JSON) {
+    serviceAccount = JSON.parse(FIREBASE_SERVICE_ACCOUNT_JSON);
+  }
+
+  if (!serviceAccount) {
+    throw new Error(
+      "Faltam credenciais Firebase. Define FIREBASE_SERVICE_ACCOUNT_BASE64 ou FIREBASE_SERVICE_ACCOUNT_JSON."
+    );
+  }
+
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+  });
+
+  firebaseReady = true;
+}
+
+function normalizeEmail(email) {
+  return String(email || "").trim().toLowerCase();
+}
+
+function mapPortalRoleToSupabaseProfileRole(portalRole, isPortalAdmin) {
+  if (isPortalAdmin) return "global_admin";
+  if (portalRole === "teacher") return "teacher";
+  return "user";
+}
+
+function mapPortalRoleToModuleRole(portalRole, isPortalAdmin) {
+  if (isPortalAdmin || portalRole === "admin") return "module_admin";
+  return "user";
+}
+
+function createSupabaseAccessJwt({ userId, email, fullName }) {
+  if (!SUPABASE_JWT_SECRET) {
+    throw new Error("Falta SUPABASE_JWT_SECRET no backend.");
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const expiresInSeconds = 60 * 60 * 2;
+
+  const token = jwt.sign(
+    {
+      aud: "authenticated",
+      exp: now + expiresInSeconds,
+      iat: now,
+      sub: userId,
+      email,
+      role: "authenticated",
+      app_metadata: {
+        provider: "portalsmart",
+        providers: ["portalsmart"],
+      },
+      user_metadata: {
+        full_name: fullName || email,
+      },
+    },
+    SUPABASE_JWT_SECRET
+  );
+
+  return {
+    token,
+    expiresAt: now + expiresInSeconds,
+  };
+}
+
+async function findSupabaseAuthUserByEmail(email) {
+  let page = 1;
+  const perPage = 1000;
+
+  while (page <= 20) {
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({
+      page,
+      perPage,
+    });
+
+    if (error) throw error;
+
+    const found = (data?.users || []).find(
+      (user) => normalizeEmail(user.email) === normalizeEmail(email)
+    );
+
+    if (found) return found;
+
+    if (!data?.users || data.users.length < perPage) break;
+    page += 1;
+  }
+
+  return null;
+}
+
+async function ensureSupabaseMirrorUser({ email, fullName, portalRole, isPortalAdmin }) {
+  const normalizedEmail = normalizeEmail(email);
+
+  let authUser = await findSupabaseAuthUserByEmail(normalizedEmail);
+
+  if (!authUser) {
+    const randomPassword = crypto.randomBytes(32).toString("base64url");
+
+    const { data, error } = await supabaseAdmin.auth.admin.createUser({
+      email: normalizedEmail,
+      password: randomPassword,
+      email_confirm: true,
+      user_metadata: {
+        full_name: fullName || normalizedEmail,
+        source: "portalsmart",
+      },
+    });
+
+    if (error) throw error;
+    authUser = data.user;
+  }
+
+  const profileRole = mapPortalRoleToSupabaseProfileRole(portalRole, isPortalAdmin);
+
+  const { error: profileError } = await supabaseAdmin.from("profiles").upsert(
+    {
+      id: authUser.id,
+      full_name: fullName || normalizedEmail,
+      role: profileRole,
+    },
+    { onConflict: "id" }
+  );
+
+  if (profileError) throw profileError;
+
+  const { data: moduleData, error: moduleError } = await supabaseAdmin
+    .from("platform_modules")
+    .select("id")
+    .eq("code", "em_capture")
+    .maybeSingle();
+
+  if (moduleError) throw moduleError;
+
+  if (moduleData?.id) {
+    const moduleRole = mapPortalRoleToModuleRole(portalRole, isPortalAdmin);
+
+    const { error: accessError } = await supabaseAdmin
+      .from("user_module_access")
+      .upsert(
+        {
+          user_id: authUser.id,
+          module_id: moduleData.id,
+          role: moduleRole,
+        },
+        { onConflict: "user_id,module_id" }
+      );
+
+    if (accessError) throw accessError;
+  }
+
+  return authUser;
+}
 
 
 function getBearerToken(req) {
@@ -96,12 +270,33 @@ async function requireAuth(req, res, next) {
 
     const { data, error } = await supabaseAuth.auth.getUser(token);
 
-    if (error || !data?.user) {
-      return res.status(401).json({ error: "Unauthorized" });
+    if (!error && data?.user) {
+      req.user = data.user;
+      return next();
     }
 
-    req.user = data.user;
-    next();
+    if (SUPABASE_JWT_SECRET) {
+      try {
+        const decoded = jwt.verify(token, SUPABASE_JWT_SECRET, {
+          audience: "authenticated",
+        });
+
+        if (decoded?.sub) {
+          req.user = {
+            id: decoded.sub,
+            email: decoded.email,
+            app_metadata: decoded.app_metadata || {},
+            user_metadata: decoded.user_metadata || {},
+          };
+
+          return next();
+        }
+      } catch (jwtError) {
+        console.error("CUSTOM JWT VERIFY ERROR:", jwtError.message);
+      }
+    }
+
+    return res.status(401).json({ error: "Unauthorized" });
   } catch (err) {
     console.error("AUTH ERROR:", err);
     return res.status(401).json({ error: "Invalid token" });
@@ -132,6 +327,91 @@ async function requireGlobalAdmin(req, res, next) {
 }
 
 app.get("/health", (_, res) => res.json({ ok: true }));
+
+app.post("/api/auth/portal-login", async (req, res) => {
+  try {
+    initFirebaseAdminIfNeeded();
+
+    const firebaseToken = getBearerToken(req);
+
+    if (!firebaseToken) {
+      return res.status(401).json({ error: "Token Firebase não enviado." });
+    }
+
+    const decodedToken = await admin.auth().verifyIdToken(firebaseToken);
+    const email = normalizeEmail(decodedToken.email);
+
+    if (!email) {
+      return res.status(401).json({ error: "O token Firebase não contém email." });
+    }
+
+    const roleDoc = await admin.firestore().collection("roles").doc(email).get();
+
+    if (!roleDoc.exists) {
+      return res.status(403).json({
+        error: "Utilizador sem perfil no PortalSmart.",
+      });
+    }
+
+    const portalProfile = roleDoc.data() || {};
+    const isPortalAdmin = portalProfile.isAdmin === true;
+    const portalModules = portalProfile.modules || {};
+    const emCaptureRole = isPortalAdmin
+      ? "admin"
+      : portalModules.em_capture || portalProfile.em_capture || "none";
+
+    if (!isPortalAdmin && (!emCaptureRole || emCaptureRole === "none")) {
+      return res.status(403).json({
+        error: "Sem acesso ao módulo EM Capture no PortalSmart.",
+      });
+    }
+
+    const fullName =
+      portalProfile.name ||
+      portalProfile.fullName ||
+      decodedToken.name ||
+      decodedToken.displayName ||
+      email;
+
+    const supabaseUser = await ensureSupabaseMirrorUser({
+      email,
+      fullName,
+      portalRole: emCaptureRole,
+      isPortalAdmin,
+    });
+
+    const { token: supabaseAccessToken, expiresAt } = createSupabaseAccessJwt({
+      userId: supabaseUser.id,
+      email,
+      fullName,
+    });
+
+    return res.json({
+      authenticated: true,
+      emCaptureRole,
+      portalProfile: {
+        email,
+        name: fullName,
+        isAdmin: isPortalAdmin,
+        modules: portalModules,
+      },
+      session: {
+        access_token: supabaseAccessToken,
+        expires_at: expiresAt,
+        user: {
+          id: supabaseUser.id,
+          email,
+          full_name: fullName,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("PORTAL LOGIN ERROR:", error);
+    return res.status(500).json({
+      error: error.message || "Erro ao validar sessão do PortalSmart.",
+    });
+  }
+});
 
 app.post("/api/queue/join", requireAuth, async (req, res) => {
   try {
@@ -454,29 +734,34 @@ app.post("/api/session/resume", requireAuth, async (req, res) => {
       });
     }
 
-    const { error: resumeSessionError } = await supabaseAdmin
+    const { data: updatedSession, error: resumeSessionError } = await supabaseAdmin
       .from("clinical_sessions")
       .update({
         status: "open",
         updated_at: new Date().toISOString(),
       })
-      .eq("id", sessionId);
+      .eq("id", sessionId)
+      .select()
+      .single();
 
     if (resumeSessionError) {
       return res.status(400).json({ error: resumeSessionError.message });
     }
 
-    const { error: updateCameraError } = await supabaseAdmin
+    const { data: updatedCameraState, error: updateCameraError } = await supabaseAdmin
       .from("camera_state")
       .update({
         status: "in_use",
         current_user_id: userId,
         current_session_id: sessionId,
-        current_box: sessionData.box || null,
+        current_box: updatedSession.box || sessionData.box || null,
         current_session_started_at: new Date().toISOString(),
+        last_heartbeat_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
-      .eq("camera_id", cameraId);
+      .eq("camera_id", cameraId)
+      .select()
+      .single();
 
     if (updateCameraError) {
       return res.status(400).json({ error: updateCameraError.message });
@@ -492,9 +777,23 @@ app.post("/api/session/resume", requireAuth, async (req, res) => {
       .eq("user_id", userId)
       .eq("status", "notified");
 
+    await supabaseAdmin.from("audit_events").insert({
+      actor_user_id: userId,
+      camera_id: cameraId,
+      session_id: sessionId,
+      type: "RESUME_SESSION",
+      payload: {
+        box: updatedSession.box,
+        work_unit: updatedSession.work_unit,
+        patient_code: updatedSession.patient_code,
+      },
+    });
+
     return res.json({
       resumed: true,
       sessionId,
+      session: updatedSession,
+      cameraState: updatedCameraState,
     });
   } catch (err) {
     console.error("RESUME SESSION ERROR:", err);
@@ -743,7 +1042,6 @@ app.post("/api/session/update", requireAuth, async (req, res) => {
       return res.status(400).json({ error: "sessionId é obrigatório." });
     }
 
-    // 🔍 Buscar sessão
     const { data: sessionData, error: sessionError } = await supabaseAdmin
       .from("clinical_sessions")
       .select("*")
@@ -754,25 +1052,46 @@ app.post("/api/session/update", requireAuth, async (req, res) => {
       return res.status(404).json({ error: "Sessão não encontrada." });
     }
 
-    // 🔒 Segurança: só o dono pode editar
-    if (sessionData.user_id !== userId) {
-      return res.status(403).json({ error: "Sem permissão para editar esta sessão." });
-    }
+    const isOwner = sessionData.user_id === userId;
+    const isAdmin = await canAdminEmCapture(userId);
 
-    // 🔒 Só pode editar se estiver ativa ou pausada
-    if (!["open", "paused"].includes(sessionData.status)) {
-      return res.status(400).json({
-        error: "Só é possível editar sessões ativas ou pausadas.",
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({
+        error: "Sem permissão para editar este registo.",
       });
     }
 
-    // 🧠 Atualizar sessão
+    const nextBox =
+      box !== undefined ? String(box).trim() : sessionData.box;
+
+    const nextWorkUnit =
+      workUnit !== undefined
+        ? String(workUnit).trim()
+        : sessionData.work_unit;
+
+    const nextPatientCode =
+      patientCode !== undefined
+        ? String(patientCode).trim()
+        : sessionData.patient_code;
+
+    if (!nextPatientCode) {
+      return res.status(400).json({
+        error: "O código do paciente é obrigatório.",
+      });
+    }
+
+    if (!nextBox) {
+      return res.status(400).json({
+        error: "A Box é obrigatória.",
+      });
+    }
+
     const { data: updatedSession, error: updateError } = await supabaseAdmin
       .from("clinical_sessions")
       .update({
-        box: box || sessionData.box,
-        work_unit: workUnit || sessionData.work_unit,
-        patient_code: patientCode || sessionData.patient_code,
+        box: nextBox,
+        work_unit: nextWorkUnit || null,
+        patient_code: nextPatientCode,
         updated_at: new Date().toISOString(),
       })
       .eq("id", sessionId)
@@ -783,16 +1102,22 @@ app.post("/api/session/update", requireAuth, async (req, res) => {
       return res.status(400).json({ error: updateError.message });
     }
 
-    // 🔄 Atualizar também o estado da câmara
-    await supabaseAdmin
+    const { data: cameraState } = await supabaseAdmin
       .from("camera_state")
-      .update({
-        current_box: box || sessionData.box,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("camera_id", sessionData.camera_id);
+      .select("camera_id, current_session_id")
+      .eq("camera_id", sessionData.camera_id)
+      .maybeSingle();
 
-    // 🧾 Auditoria (MUITO IMPORTANTE 👇)
+    if (cameraState?.current_session_id === sessionId) {
+      await supabaseAdmin
+        .from("camera_state")
+        .update({
+          current_box: nextBox,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("camera_id", sessionData.camera_id);
+    }
+
     await supabaseAdmin.from("audit_events").insert({
       actor_user_id: userId,
       camera_id: sessionData.camera_id,
@@ -800,9 +1125,11 @@ app.post("/api/session/update", requireAuth, async (req, res) => {
       type: "UPDATE_SESSION",
       payload: {
         old_box: sessionData.box,
-        new_box: box,
+        new_box: nextBox,
+        old_work_unit: sessionData.work_unit,
+        new_work_unit: nextWorkUnit || null,
         old_patient_code: sessionData.patient_code,
-        new_patient_code: patientCode,
+        new_patient_code: nextPatientCode,
       },
     });
 
@@ -812,10 +1139,11 @@ app.post("/api/session/update", requireAuth, async (req, res) => {
     });
   } catch (err) {
     console.error("UPDATE SESSION ERROR:", err);
-    return res.status(500).json({ error: "Erro interno ao atualizar sessão." });
+    return res.status(500).json({
+      error: "Erro interno ao atualizar sessão.",
+    });
   }
 });
-
 
 
 app.get("/api/teachers", requireAuth, async (req, res) => {
