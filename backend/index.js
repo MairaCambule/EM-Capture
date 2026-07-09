@@ -858,14 +858,118 @@ app.post("/api/session/stop", requireAuth, async (req, res) => {
 
 console.log("✅ Rota /api/photos/ingest carregada");
 
+async function getOptionalUserFromRequest(req) {
+  const token = getBearerToken(req);
+
+  if (!token) return null;
+
+  const { data, error } = await supabaseAuth.auth.getUser(token);
+
+  if (!error && data?.user) {
+    return data.user;
+  }
+
+  if (SUPABASE_JWT_SECRET) {
+    try {
+      const decoded = jwt.verify(token, SUPABASE_JWT_SECRET, {
+        audience: "authenticated",
+      });
+
+      if (decoded?.sub) {
+        return {
+          id: decoded.sub,
+          email: decoded.email,
+          app_metadata: decoded.app_metadata || {},
+          user_metadata: decoded.user_metadata || {},
+        };
+      }
+    } catch (jwtError) {
+      console.error("PHOTO OPTIONAL JWT VERIFY ERROR:", jwtError.message);
+    }
+  }
+
+  return null;
+}
+
+async function findSessionForPhoto({ cameraId, cameraState, requestUserId }) {
+  const possibleUserId =
+    cameraState?.current_user_id || requestUserId || null;
+
+  if (cameraState?.current_session_id) {
+    const { data: sessionData, error: sessionError } = await supabaseAdmin
+      .from("clinical_sessions")
+      .select("*")
+      .eq("id", cameraState.current_session_id)
+      .maybeSingle();
+
+    if (sessionError) {
+      console.error("PHOTO SESSION BY CAMERA_STATE ERROR:", sessionError);
+    }
+
+    if (sessionData) {
+      return sessionData;
+    }
+  }
+
+  if (possibleUserId) {
+    const { data: sessionData, error: sessionError } = await supabaseAdmin
+      .from("clinical_sessions")
+      .select("*")
+      .eq("camera_id", cameraId)
+      .eq("user_id", possibleUserId)
+      .in("status", ["open", "paused"])
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (sessionError) {
+      console.error("PHOTO SESSION BY USER ERROR:", sessionError);
+    }
+
+    if (sessionData) {
+      return sessionData;
+    }
+  }
+
+  const { data: sessionData, error: sessionError } = await supabaseAdmin
+    .from("clinical_sessions")
+    .select("*")
+    .eq("camera_id", cameraId)
+    .in("status", ["open", "paused"])
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (sessionError) {
+    console.error("PHOTO SESSION BY CAMERA ERROR:", sessionError);
+  }
+
+  return sessionData || null;
+}
+
 app.post(
   "/api/photos/ingest",
-  upload.single("photo"),
+  upload.any(),
   async (req, res) => {
     console.log("🔥 REQUEST RECEBIDO EM /api/photos/ingest");
+
     try {
-      const { cameraId, phase = "during" } = req.body;
-      const file = req.file;
+      const cameraId =
+        req.body?.cameraId ||
+        req.body?.camera_id ||
+        req.body?.cameraID ||
+        req.query?.cameraId ||
+        req.query?.camera_id;
+
+      const requestedPhase =
+        req.body?.phase ||
+        req.body?.currentPhase ||
+        req.body?.photoPhase ||
+        req.query?.phase;
+
+      const file =
+        req.file ||
+        (Array.isArray(req.files) && req.files.length > 0 ? req.files[0] : null);
 
       if (!cameraId) {
         return res.status(400).json({ error: "cameraId is required" });
@@ -875,50 +979,74 @@ app.post(
         return res.status(400).json({ error: "photo file is required" });
       }
 
+      const optionalUser = await getOptionalUserFromRequest(req);
+      const requestUserId = optionalUser?.id || null;
+
       const { data: cameraState, error: cameraError } = await supabaseAdmin
         .from("camera_state")
         .select("*")
         .eq("camera_id", cameraId)
-        .single();
+        .maybeSingle();
 
-      if (cameraError || !cameraState) {
+      if (cameraError) {
+        console.error("PHOTO CAMERA STATE ERROR:", cameraError);
+        return res.status(400).json({ error: cameraError.message });
+      }
+
+      if (!cameraState) {
         return res
           .status(404)
           .json({ error: "Estado da câmara não encontrado." });
       }
 
-      if (
-        cameraState.status !== "in_use" ||
-        !cameraState.current_session_id ||
-        !cameraState.current_user_id
-      ) {
+      const sessionData = await findSessionForPhoto({
+        cameraId,
+        cameraState,
+        requestUserId,
+      });
+
+      if (!sessionData?.id || !sessionData?.user_id) {
         return res.status(400).json({
-          error: "Não existe sessão ativa para esta câmara.",
+          error:
+            "Não existe sessão ativa para esta câmara/utilizador. Inicia ou retoma um registo antes de fotografar.",
         });
       }
 
-      const sessionId = cameraState.current_session_id;
-      const userId = cameraState.current_user_id;
+      const sessionId = sessionData.id;
+      const userId = sessionData.user_id;
 
-      const fileExt = file.originalname.split(".").pop() || "jpg";
-      const safePhase = ["before", "during", "after"].includes(phase)
-        ? phase
-        : "during";
+      const safePhase = ["before", "during", "after"].includes(requestedPhase)
+        ? requestedPhase
+        : ["before", "during", "after"].includes(cameraState.current_phase)
+          ? cameraState.current_phase
+          : "during";
+
+      const rawExt = String(file.originalname || "jpg")
+        .split(".")
+        .pop()
+        .toLowerCase();
+
+      const fileExt = ["jpg", "jpeg", "png", "webp", "heic"].includes(rawExt)
+        ? rawExt
+        : "jpg";
 
       const fileName = `${Date.now()}-${Math.random()
         .toString(36)
         .slice(2)}.${fileExt}`;
 
-      const storagePath = `${sessionId}/${safePhase}/${fileName}`;
+      // A foto fica fisicamente organizada pelo utilizador e pelo registo.
+      // A associação real no perfil do utilizador é feita por user_id + session_id na tabela session_photos.
+      const storagePath = `${userId}/${sessionId}/${safePhase}/${fileName}`;
 
       const { error: uploadError } = await supabaseAdmin.storage
         .from(PHOTO_BUCKET)
         .upload(storagePath, file.buffer, {
-          contentType: file.mimetype,
+          contentType: file.mimetype || "image/jpeg",
           upsert: false,
         });
 
       if (uploadError) {
+        console.error("PHOTO STORAGE UPLOAD ERROR:", uploadError);
         return res.status(400).json({ error: uploadError.message });
       }
 
@@ -936,13 +1064,62 @@ app.post(
         .single();
 
       if (insertError) {
+        console.error("PHOTO INSERT ERROR:", insertError);
+
+        // Evita deixar ficheiro perdido no storage se a linha não entrar na tabela.
+        await supabaseAdmin.storage
+          .from(PHOTO_BUCKET)
+          .remove([storagePath]);
+
         return res.status(400).json({ error: insertError.message });
       }
+
+      await supabaseAdmin
+        .from("clinical_sessions")
+        .update({
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", sessionId);
+
+      await supabaseAdmin
+        .from("camera_state")
+        .update({
+          status: "in_use",
+          current_user_id: userId,
+          current_session_id: sessionId,
+          current_phase: safePhase,
+          last_heartbeat_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("camera_id", cameraId);
+
+      await supabaseAdmin.from("audit_events").insert({
+        actor_user_id: userId,
+        camera_id: cameraId,
+        session_id: sessionId,
+        type: "PHOTO_INGEST",
+        payload: {
+          photo_id: photoRow.id,
+          phase: safePhase,
+          storage_path: storagePath,
+        },
+      });
+
+      console.log("✅ FOTO ASSOCIADA AUTOMATICAMENTE", {
+        photoId: photoRow.id,
+        userId,
+        sessionId,
+        cameraId,
+        phase: safePhase,
+      });
 
       return res.json({
         ingested: true,
         photoId: photoRow.id,
+        userId,
         sessionId,
+        cameraId,
+        phase: safePhase,
         storagePath,
       });
     } catch (error) {
