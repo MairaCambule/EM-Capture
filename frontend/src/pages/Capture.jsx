@@ -6,7 +6,9 @@ import axios from "axios";
 
 //const API_URL = "https://em-capture-backend.onrender.com/api/photos/ingest";
 //const API_URL = import.meta.env.VITE_API_URL;
-const CAMERA_ID = import.meta.env.VITE_DEFAULT_CAMERA_ID;
+const CAMERA_ID =
+  import.meta.env.VITE_DEFAULT_CAMERA_ID ||
+  "00000000-0000-0000-0000-000000000001";
 
 const PHOTO_BUCKET = "clinical-photos";
 
@@ -54,7 +56,7 @@ export default function Capture({ session }) {
 
   const [recordActionLoadingId, setRecordActionLoadingId] = useState(null);
 
-  const API_BASE_URL = import.meta.env.VITE_API_URL;
+  const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
   //const BASE_URL = "https://em-capture-backend.onrender.com";
 
@@ -74,7 +76,7 @@ export default function Capture({ session }) {
   const [expiringTurn, setExpiringTurn] = useState(false);
 
   const [selectedFile, setSelectedFile] = useState(null);
-  const [photoPhase, setPhotoPhase] = useState("after");
+  const [photoPhase, setPhotoPhase] = useState("during");
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   const [myRecords, setMyRecords] = useState([]);
@@ -591,7 +593,6 @@ export default function Capture({ session }) {
     cameraState?.status === "in_use" &&
     cameraState?.current_user_id === currentUserId;
 */
-  console.log("session:", session);
   console.log("access token exists:", !!session?.access_token);
   console.log("API_BASE_URL:", API_BASE_URL);
 
@@ -1331,16 +1332,34 @@ export default function Capture({ session }) {
     }
   }
 
-  async function uploadPhoto() {
+  async function uploadPhoto(fileFromInput = null, phaseFromInput = null) {
+    const fileToUpload = fileFromInput || selectedFile;
+    const phaseToUpload = phaseFromInput || currentPhase || photoPhase || "during";
+
     try {
-      if (!selectedFile || !cameraState?.camera_id && !CAMERA_ID) return;
+      if (!fileToUpload) {
+        setMsg({
+          text: "Seleciona ou captura uma fotografia antes de enviar.",
+          type: "warning",
+        });
+        return;
+      }
+
+      if (!CAMERA_ID) {
+        throw new Error("CAMERA_ID não está configurado.");
+      }
+
+      if (!canUploadPhotos && !currentSession) {
+        throw new Error("Não existe sessão ativa para associar a fotografia.");
+      }
 
       setUploadingPhoto(true);
+      setSelectedFile(fileToUpload);
 
       const formData = new FormData();
-      formData.append("photo", selectedFile);
+      formData.append("photo", fileToUpload, fileToUpload.name || `capture-${Date.now()}.jpg`);
       formData.append("cameraId", CAMERA_ID);
-      formData.append("phase", photoPhase);
+      formData.append("phase", phaseToUpload);
 
       const accessToken = await getApiAccessToken();
 
@@ -1363,12 +1382,15 @@ export default function Capture({ session }) {
         throw new Error("O backend devolveu uma resposta inválida.");
       }
 
+      console.log("PHOTO INGEST STATUS:", response.status);
+      console.log("PHOTO INGEST RESULT:", data);
+
       if (!response.ok) {
         throw new Error(data.error || "Erro ao carregar fotografia.");
       }
 
       setMsg({
-        text: "Fotografia carregada com sucesso.",
+        text: "Fotografia associada automaticamente ao registo ativo.",
         type: "success",
       });
 
@@ -2269,7 +2291,7 @@ export default function Capture({ session }) {
         </div>
 
 
-        {false && canSeeSessionClinic && (
+        {canSeeSessionClinic && (
           <div
             style={{
               background: "#fff",
@@ -2416,8 +2438,11 @@ export default function Capture({ session }) {
               </label>
 
               <select
-                value={photoPhase}
-                onChange={(e) => setPhotoPhase(e.target.value)}
+                value={currentPhase}
+                onChange={(e) => {
+                  setPhotoPhase(e.target.value);
+                  updatePhase(e.target.value);
+                }}
                 disabled={!currentSession || uploadingPhoto}
                 style={{ marginBottom: 12 }}
               >
@@ -2429,7 +2454,14 @@ export default function Capture({ session }) {
               <input
                 type="file"
                 accept="image/*"
-                onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                onChange={async (e) => {
+                  const file = e.target.files?.[0] || null;
+                  setSelectedFile(file);
+                  if (file) {
+                    await uploadPhoto(file, currentPhase);
+                    e.target.value = "";
+                  }
+                }}
                 disabled={!currentSession || uploadingPhoto}
                 style={{ marginBottom: 12 }}
               />
@@ -2437,9 +2469,9 @@ export default function Capture({ session }) {
               <button
                 type="button"
                 disabled={!currentSession || !selectedFile || uploadingPhoto}
-                onClick={uploadPhoto}
+                onClick={() => uploadPhoto()}
               >
-                {uploadingPhoto ? "A carregar..." : "Carregar fotografia"}
+                {uploadingPhoto ? "A carregar..." : "Enviar fotografia selecionada"}
               </button>
             </div>
           </div>
