@@ -4,9 +4,9 @@ import path from "path";
 import axios from "axios";
 import FormData from "form-data";
 
-const WATCH_FOLDER = "Z:/EM Capture/incoming";
-const PROCESSED_FOLDER = "Z:/EM Capture/processed";
-const ERROR_FOLDER = "Z:/EM Capture/error";
+const WATCH_FOLDER = "C:/EM Capture/incoming";
+const PROCESSED_FOLDER = "C:/EM Capture/processed";
+const ERROR_FOLDER = "C:/EM Capture/error";
 
 const API_URL = "http://localhost:3001/api/photos/ingest";
 const ACTIVE_SESSION_URL = "http://localhost:3001/api/camera/active-session";
