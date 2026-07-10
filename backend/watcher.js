@@ -4,9 +4,9 @@ import path from "path";
 import axios from "axios";
 import FormData from "form-data";
 
-const WATCH_FOLDER = "C:/Users/jbispo/Downloads/EM Capture (4)/EM Capture/incoming";
-const PROCESSED_FOLDER = "C:/Users/jbispo/Downloads/EM Capture (4)/EM Capture/processed";
-const ERROR_FOLDER = "C:/Users/jbispo/Downloads/EM Capture (4)/EM Capture/error";
+const WATCH_FOLDER = "Z:/EM Capture/incoming";
+const PROCESSED_FOLDER = "Z:/EM Capture/processed";
+const ERROR_FOLDER = "Z:/EM Capture/error";
 
 const API_URL = "https://em-capture-backend.onrender.com/api/photos/ingest";
 const ACTIVE_SESSION_URL =
