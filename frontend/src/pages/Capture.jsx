@@ -2309,24 +2309,7 @@ async function adminForceStopSession() {
     marginBottom: 20,
   }}
 >
-  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-    <h2
-      style={{
-        margin: 0,
-        color: "#17324d",
-        fontSize: "1.55rem",
-      }}
-    >
-      Estado da câmara 📷
-    </h2>
 
-    {loading && (
-      <span
-        className="loading-spinner"
-        aria-label="A atualizar"
-      />
-    )}
-  </div>
 
   <div
     style={{
