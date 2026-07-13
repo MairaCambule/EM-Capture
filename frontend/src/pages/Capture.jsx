@@ -52,13 +52,21 @@ export default function Capture({ session }) {
 
   const [showStopConfirmModal, setShowStopConfirmModal] = useState(false);
 
-  const [showAdminCloseModal, setShowAdminCloseModal] = useState(false);
-
-  const [adminCloseReason, setAdminCloseReason] = useState("");
-
-  const [adminClosingSession, setAdminClosingSession] = useState(false);
-
   const [showAdminForceStopModal, setShowAdminForceStopModal] = useState(false);
+
+  const [adminForceStopReason, setAdminForceStopReason] = useState("");
+
+  const [adminForceStopLoading, setAdminForceStopLoading] = useState(false);
+
+  //const [setAdminForceStopReason, setAdminForceStopReason] = useState(false);
+
+  //const [showAdminCloseModal, setShowAdminCloseModal] = useState(false);
+
+  //const [adminCloseReason, setAdminCloseReason] = useState("");
+
+  //const [adminClosingSession, setAdminClosingSession] = useState(false);
+
+  //const [showAdminForceStopModal, setShowAdminForceStopModal] = useState(false);
 
 
 
@@ -2290,6 +2298,74 @@ async function adminForceStopSession() {
             >
               {statusMeta.label}
             </div>
+
+            <div
+  style={{
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 16,
+    flexWrap: "wrap",
+    marginBottom: 20,
+  }}
+>
+  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+    <h2
+      style={{
+        margin: 0,
+        color: "#17324d",
+        fontSize: "1.55rem",
+      }}
+    >
+      Estado da câmara 📷
+    </h2>
+
+    {loading && (
+      <span
+        className="loading-spinner"
+        aria-label="A atualizar"
+      />
+    )}
+  </div>
+
+  <div
+    style={{
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      flexWrap: "wrap",
+    }}
+  >
+    <div className={`badge ${statusMeta.className}`}>
+      {statusMeta.label}
+    </div>
+
+    {isGlobalAdmin && cameraState?.status === "in_use" && (
+      <button
+        type="button"
+        onClick={() => setShowAdminForceStopModal(true)}
+        style={{
+          minHeight: 38,
+          padding: "8px 14px",
+          borderRadius: 12,
+          border: "1px solid #fecaca",
+          background: "#fff7f7",
+          color: "#b42318",
+          fontWeight: 700,
+          fontSize: "0.9rem",
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          gap: 7,
+          boxShadow: "0 4px 12px rgba(180, 35, 24, 0.06)",
+        }}
+      >
+        <span aria-hidden="true">⏹</span>
+        Encerrar
+      </button>
+    )}
+  </div>
+</div>
           </div>
 
 
@@ -2344,21 +2420,7 @@ async function adminForceStopSession() {
             </div>
           </div>
 
-{isGlobalAdmin && cameraState?.status === "in_use" && (
-  <button
-    type="button"
-    className="secondary-btn"
-    onClick={() => setShowAdminForceStopModal(true)}
-    style={{
-      marginLeft: 10,
-      color: "#b91c1c",
-      borderColor: "#fecaca",
-      background: "#fff7f7",
-    }}
-  >
-    Encerrar sessão
-  </button>
-)}
+
 
         </div>
         <div
