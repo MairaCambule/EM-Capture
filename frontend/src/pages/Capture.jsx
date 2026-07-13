@@ -58,6 +58,9 @@ export default function Capture({ session }) {
 
   const [adminClosingSession, setAdminClosingSession] = useState(false);
 
+  const [showAdminForceStopModal, setShowAdminForceStopModal] = useState(false);
+
+
 
   const [isEditingSessionData, setIsEditingSessionData] = useState(false);
 
@@ -2340,7 +2343,7 @@ async function adminForceStopSession() {
               </div>
             </div>
           </div>
-          
+
 {isGlobalAdmin && cameraState?.status === "in_use" && (
   <button
     type="button"
