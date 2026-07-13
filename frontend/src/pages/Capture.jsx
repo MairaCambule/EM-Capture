@@ -2319,9 +2319,6 @@ async function adminForceStopSession() {
       flexWrap: "wrap",
     }}
   >
-    <div className={`badge ${statusMeta.className}`}>
-      {statusMeta.label}
-    </div>
 
     {isGlobalAdmin && cameraState?.status === "in_use" && (
       <button
