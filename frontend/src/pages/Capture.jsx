@@ -52,6 +52,13 @@ export default function Capture({ session }) {
 
   const [showStopConfirmModal, setShowStopConfirmModal] = useState(false);
 
+  const [showAdminCloseModal, setShowAdminCloseModal] = useState(false);
+
+  const [adminCloseReason, setAdminCloseReason] = useState("");
+
+  const [adminClosingSession, setAdminClosingSession] = useState(false);
+
+
   const [isEditingSessionData, setIsEditingSessionData] = useState(false);
 
   const [recordActionLoadingId, setRecordActionLoadingId] = useState(null);
@@ -1498,6 +1505,41 @@ export default function Capture({ session }) {
   }
 
 
+async function adminForceStopSession() {
+  try {
+    setAdminForceStopLoading(true);
+
+    const data = await apiPost("/api/admin/session/force-stop", {
+      cameraId: CAMERA_ID,
+      reason:
+        adminForceStopReason.trim() ||
+        "Sessão encerrada administrativamente.",
+    });
+
+    setShowAdminForceStopModal(false);
+    setAdminForceStopReason("");
+
+    setMsg({
+      type: "success",
+      text: data.message || "Sessão encerrada e câmara libertada.",
+    });
+
+    await loadData();
+  } catch (err) {
+    console.error("ADMIN FORCE STOP ERROR:", err);
+
+    setMsg({
+      type: "warning",
+      text:
+        err.message ||
+        "Não foi possível encerrar administrativamente a sessão.",
+    });
+  } finally {
+    setAdminForceStopLoading(false);
+  }
+}
+
+
   async function archiveRecord(sessionId) {
     try {
       setRecordActionLoadingId(sessionId);
@@ -2081,6 +2123,91 @@ export default function Capture({ session }) {
               </div>
             </div>
           )}
+
+ {showAdminForceStopModal && (
+  <div
+    className="modal-overlay"
+    onClick={() => {
+      if (!adminForceStopLoading) {
+        setShowAdminForceStopModal(false);
+      }
+    }}
+  >
+    <div
+      className="modal-content"
+      onClick={(e) => e.stopPropagation()}
+      style={{ maxWidth: 560 }}
+    >
+      <h2 style={{ marginTop: 0, color: "#1e4a8d" }}>
+        Encerrar sessão administrativamente
+      </h2>
+
+      <p style={{ color: "#5f6b7a", lineHeight: 1.6 }}>
+        Esta ação irá terminar a sessão atual, libertar a câmara e notificar
+        o próximo utilizador da fila.
+      </p>
+
+      <label
+        style={{
+          display: "block",
+          marginBottom: 8,
+          fontWeight: 700,
+          color: "#17324d",
+        }}
+      >
+        Motivo
+      </label>
+
+      <textarea
+        value={adminForceStopReason}
+        onChange={(e) => setAdminForceStopReason(e.target.value)}
+        placeholder="Ex.: O utilizador abandonou a sessão sem concluir."
+        rows={4}
+        disabled={adminForceStopLoading}
+        style={{
+          width: "100%",
+          padding: 14,
+          borderRadius: 12,
+          border: "1px solid #dbe3ec",
+          resize: "vertical",
+          boxSizing: "border-box",
+        }}
+      />
+
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          gap: 12,
+          marginTop: 22,
+        }}
+      >
+        <button
+          type="button"
+          className="secondary-btn"
+          disabled={adminForceStopLoading}
+          onClick={() => setShowAdminForceStopModal(false)}
+        >
+          Cancelar
+        </button>
+
+        <button
+          type="button"
+          className="primary-btn"
+          disabled={adminForceStopLoading}
+          onClick={adminForceStopSession}
+          style={{
+            background: "#b91c1c",
+          }}
+        >
+          {adminForceStopLoading
+            ? "A encerrar..."
+            : "Confirmar encerramento"}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
         </div>
 
 
@@ -2213,6 +2340,22 @@ export default function Capture({ session }) {
               </div>
             </div>
           </div>
+          
+{isGlobalAdmin && cameraState?.status === "in_use" && (
+  <button
+    type="button"
+    className="secondary-btn"
+    onClick={() => setShowAdminForceStopModal(true)}
+    style={{
+      marginLeft: 10,
+      color: "#b91c1c",
+      borderColor: "#fecaca",
+      background: "#fff7f7",
+    }}
+  >
+    Encerrar sessão
+  </button>
+)}
 
         </div>
         <div
