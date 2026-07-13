@@ -856,6 +856,126 @@ app.post("/api/session/stop", requireAuth, async (req, res) => {
   }
 });
 
+app.post(
+  "/api/admin/session/force-stop",
+  requireAuth,
+  async (req, res) => {
+    try {
+      const adminUserId = req.user.id;
+      const { cameraId, reason } = req.body;
+
+      if (!cameraId) {
+        return res.status(400).json({
+          error: "cameraId is required",
+        });
+      }
+
+      // 1. Confirmar perfil global
+      const { data: adminProfile, error: profileError } =
+        await supabaseAdmin
+          .from("profiles")
+          .select("role")
+          .eq("id", adminUserId)
+          .single();
+
+      if (profileError || !adminProfile) {
+        return res.status(403).json({
+          error: "Não foi possível validar o perfil do administrador.",
+        });
+      }
+
+      // 2. Confirmar se é module_admin do EM Capture
+      const { data: moduleAccess, error: moduleAccessError } =
+        await supabaseAdmin
+          .from("user_module_access")
+          .select(`
+            role,
+            platform_modules (
+              code
+            )
+          `)
+          .eq("user_id", adminUserId);
+
+      if (moduleAccessError) {
+        return res.status(400).json({
+          error: moduleAccessError.message,
+        });
+      }
+
+      const isGlobalAdmin = adminProfile.role === "global_admin";
+
+      const isEmCaptureAdmin = (moduleAccess || []).some(
+        (item) =>
+          item.platform_modules?.code === "em_capture" &&
+          item.role === "module_admin"
+      );
+
+      if (!isGlobalAdmin && !isEmCaptureAdmin) {
+        return res.status(403).json({
+          error:
+            "Apenas o administrador global ou o administrador do módulo pode encerrar esta sessão.",
+        });
+      }
+
+      // 3. Obter sessão atualmente ligada à câmara
+      const { data: cameraState, error: cameraError } =
+        await supabaseAdmin
+          .from("camera_state")
+          .select("*")
+          .eq("camera_id", cameraId)
+          .single();
+
+      if (cameraError || !cameraState) {
+        return res.status(404).json({
+          error: "Estado da câmara não encontrado.",
+        });
+      }
+
+      if (!cameraState.current_session_id) {
+        return res.status(400).json({
+          error: "Não existe nenhuma sessão ativa nesta câmara.",
+        });
+      }
+
+      const currentSessionId = cameraState.current_session_id;
+
+      /*
+       * Esta RPC será criada depois de confirmarmos a definição
+       * da função stop_session atual.
+       */
+      const { data, error } = await supabaseAdmin.rpc(
+        "admin_force_stop_session",
+        {
+          p_camera_id: cameraId,
+          p_admin_user_id: adminUserId,
+          p_reason:
+            reason?.trim() ||
+            "Sessão encerrada administrativamente.",
+        }
+      );
+
+      if (error) {
+        console.error("ADMIN FORCE STOP RPC ERROR:", error);
+
+        return res.status(400).json({
+          error: error.message,
+        });
+      }
+
+      return res.json({
+        stopped: data,
+        sessionId: currentSessionId,
+      });
+    } catch (err) {
+      console.error("ADMIN FORCE STOP ERROR:", err);
+
+      return res.status(500).json({
+        error: "Erro ao encerrar administrativamente a sessão.",
+      });
+    }
+  }
+);
+
 console.log("✅ Rota /api/photos/ingest carregada");
 
 async function getOptionalUserFromRequest(req) {
