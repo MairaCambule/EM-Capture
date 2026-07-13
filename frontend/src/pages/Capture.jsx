@@ -2268,23 +2268,6 @@ async function adminForceStopSession() {
               flexWrap: "wrap",
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <h2 style={{ margin: 0 }}>Estado da câmara 📷</h2>
-
-              {loading && (
-                <span
-                  style={{
-                    width: 18,
-                    height: 18,
-                    border: "3px solid #dbeafe",
-                    borderTop: "3px solid #1e4a8d",
-                    borderRadius: "50%",
-                    display: "inline-block",
-                    animation: "spin 0.8s linear infinite",
-                  }}
-                />
-              )}
-            </div>
 
             <div
               style={{
