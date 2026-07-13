@@ -2311,14 +2311,14 @@ async function adminForceStopSession() {
 >
 
 
-  <div
-    style={{
-      display: "flex",
-      alignItems: "center",
-      gap: 10,
-      flexWrap: "wrap",
-    }}
-  >
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "flex-end",
+                  marginTop: 12,
+                }}
+              >
 
     {isGlobalAdmin && cameraState?.status === "in_use" && (
       <button
